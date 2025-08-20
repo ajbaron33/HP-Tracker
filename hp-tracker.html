@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Monster HP Tracker</title>
+<style>
+  body{background:#0b0b0c;color:#e8eaed;font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:20px;}
+  .card{background:#131316;border:1px solid #2a2a31;border-radius:14px;padding:12px;}
+  input,button,select{padding:8px;margin:4px;border-radius:8px;border:1px solid #2a2a31;background:#1f1f24;color:#e8eaed;}
+  /* Remove spinner arrows on number inputs */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
+  input[type=number]{ -moz-appearance: textfield; }
+  .row{margin:8px 0;padding:8px;border-radius:10px;}
+  .row.alive{background:#0e1a12;}
+  .row.down{background:#1f0f12;}
+  .row.bloodied{background:#3a3100;}
+  .bloodied{color:#ff6b6b;font-weight:600;}
+  .conditions{margin-top:6px;font-size:0.9em;color:#d4d4d4;}
+  #list{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px;margin-top:12px;}
+  @media (max-width: 600px){ #list{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="card">
+  <form id="addForm">
+    <input id="name" placeholder="Monster name" required />
+    <input id="hp" type="number" placeholder="Max HP" min="1" required />
+    <input id="ac" type="number" placeholder="AC" />
+    <button type="submit">Add</button>
+    <button id="clearAll" type="button">Clear All Monsters</button>
+  </form>
+</div>
+<div id="list"></div>
+<script>(()=>{
+  const $=s=>document.querySelector(s);
+  const storeKey='monster_hp_v3';
+  let monsters=load();
+
+  const conditionsList=["Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
+
+  function save(){localStorage.setItem(storeKey,JSON.stringify(monsters));}
+  function load(){try{const raw=localStorage.getItem(storeKey);return raw?JSON.parse(raw):[];}catch{return[];}}
+
+  function addMonster(name,maxHP,ac=0){
+    name=name.trim(); maxHP=Number(maxHP);
+    if(!name||!maxHP) return;
+    monsters.push({id:crypto.randomUUID(),name,maxHP,currentHP:maxHP,ac:Number(ac)||0,conditions:[]});
+    save(); render();
+  }
+  function damage(id,amt){const m=monsters.find(m=>m.id===id);if(!m)return;m.currentHP=Math.max(0,m.currentHP-amt);save();render();}
+  function heal(id,amt){const m=monsters.find(m=>m.id===id);if(!m)return;m.currentHP=Math.min(m.maxHP,m.currentHP+amt);save();render();}
+  function updateConditions(id,selected){const m=monsters.find(m=>m.id===id);if(!m)return;m.conditions=selected;save();render();}
+
+  function rowTemplate(m){
+    const bloodied=m.currentHP<=m.maxHP/2&&m.currentHP>0;
+    const down=m.currentHP<=0;
+    const cls=down?"row down":bloodied?"row bloodied":"row alive";
+    const skull=down?"💀 ":"";
+    const condOptions=conditionsList.map(c=>`<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('');
+    const condDisplay=m.conditions.length?`<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>`:"";
+    return `<div class="${cls}" data-id="${m.id}">
+      <div><strong>${skull}${m.name}</strong> (AC ${m.ac})</div>
+      ${bloodied&&!down?`<div class="bloodied">⚠️ Bloodied</div>`:''}
+      <div>HP: ${m.currentHP}/${m.maxHP}</div>
+      <input class="dmg" type="number" placeholder="dmg"/> <button class="do-dmg">Damage</button>
+      <input class="heal" type="number" placeholder="heal"/> <button class="do-heal">Heal</button>
+      <div>
+        <select class="condSelect" multiple size="4">${condOptions}</select>
+      </div>
+      ${condDisplay}
+    </div>`;
+  }
+
+  function render(){
+    const list=$('#list');
+    list.innerHTML=monsters.map(rowTemplate).join('');
+    list.querySelectorAll('.row').forEach(row=>{
+      const id=row.dataset.id;
+      const dmgInput=row.querySelector('.dmg');
+      const healInput=row.querySelector('.heal');
+      row.querySelector('.do-dmg').onclick=(e)=>{e.preventDefault();const v=Number(dmgInput.value||0);if(v>0)damage(id,v);};
+      row.querySelector('.do-heal').onclick=(e)=>{e.preventDefault();const v=Number(healInput.value||0);if(v>0)heal(id,v);};
+      dmgInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(dmgInput.value||0);if(v>0)damage(id,v);}});
+      healInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(healInput.value||0);if(v>0)heal(id,v);}});
+      const condSel=row.querySelector('.condSelect');
+      condSel.onchange=()=>{
+        const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
+        updateConditions(id,selected);
+      };
+    });
+  }
+
+  $('#addForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    addMonster($('#name').value,$('#hp').value,$('#ac').value);
+    e.target.reset();
+  });
+
+  $('#clearAll').addEventListener('click',()=>{
+    if(confirm('Are you sure you want to clear all monsters?')){
+      monsters=[];
+      save();
+      render();
+    }
+  });
+
+  render();
+})();</script>
+</body>
+</html>
