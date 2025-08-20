@@ -389,7 +389,7 @@
       // Conditions
       const condSel = row.querySelector('.condSelect');
       condSel.onchange = () => {
-        const selected=[        const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
+        const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
         updateConditions(id,selected);
       };
       row.querySelector('.clear-cond').onclick = (e)=>{ e.preventDefault(); updateConditions(id,[]); };
@@ -430,14 +430,11 @@
     $('#name').focus();
   });
 
-  // iPad: ensure tapping "Add" always submits
+  // iPad-safe Add button: use only click + Enter key
   const addBtn = document.querySelector('#addForm button[type="submit"]');
-  ['touchstart','touchend','click','keydown'].forEach(evt=>{
-    addBtn.addEventListener(evt, (e)=>{
-      if (evt === 'keydown' && e.key !== 'Enter') return;
-      e.preventDefault();
-      submitForm();
-    }, { passive:false });
+  addBtn.addEventListener('click', () => { submitForm(); });
+  addBtn.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter') { e.preventDefault(); submitForm(); }
   });
 
   // Clear all
