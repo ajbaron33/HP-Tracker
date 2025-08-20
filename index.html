@@ -20,9 +20,9 @@
 
   /* Card */
   .row{margin:8px 0;padding:8px;border-radius:10px;display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;position:relative;}
-  .row.alive{background:#0e1a12;}
-  .row.down{background:#1f0f12;}
-  .row.bloodied{background:#3a3100;}
+  .row.alive{background:#0e1a12;}      /* green-ish */
+  .row.down{background:#1f0f12;}       /* red-ish */
+  .row.bloodied{background:#3a3100;}   /* yellow-ish */
   .bloodied{color:#ff6b6b;font-weight:600;}
   .conditions{margin-top:6px;font-size:0.9em;color:#d4d4d4;}
   .name-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
@@ -42,17 +42,13 @@
   /* Dialog */
   dialog{border:1px solid #2a2a31;background:#131316;color:#e8eaed;border-radius:12px;padding:16px;max-width:520px;width:calc(100% - 24px);}
   dialog::backdrop{background:rgba(0,0,0,0.55);}
-  .dlg-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-  .dlg-row{margin:8px 0;}
-  .dlg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
-  .danger{background:#7a1f25;border-color:#a43a42;}
   .ghost{background:#1b1b20;border-color:#2a2a31;}
 </style>
 </head>
 <body>
 <div class="card">
   <form id="addForm">
-    <input id="name" placeholder="Monster Name" required />
+    <input id="name" placeholder="Monster name" required />
     <input id="hp" type="number" placeholder="Max HP" min="1" required />
     <input id="ac" type="number" placeholder="AC" />
     <input id="imgFile" type="file" accept="image/*" />
@@ -67,7 +63,7 @@
 <script>
 (()=>{
   const $ = s => document.querySelector(s);
-  const storeKey = 'monster_hp_v10';
+  const storeKey = 'monster_hp_v11';
   const defaultImage = new URL('default-monster.png', location.href).href; // robust relative URL
 
   const genId = () =>
@@ -141,6 +137,7 @@
     }
   }
 
+  /* ---------- Simplified Edit dialog: Name, Max HP, Current HP, AC ---------- */
   function openEditDialog(id){
     const m = monsters.find(x=>x.id===id); if(!m) return;
 
@@ -149,40 +146,23 @@
       <form method="dialog">
         <h3 style="margin:0 0 10px 0;">Edit ${escapeHtml(m.name)}</h3>
 
-        <div class="dlg-grid">
-          <label class="dlg-row">Name
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <label>Name
             <input id="edName" value="${escapeHtml(m.name)}" />
           </label>
-          <label class="dlg-row">AC
+          <label>AC
             <input id="edAC" type="number" min="0" value="${m.ac}" />
           </label>
 
-          <label class="dlg-row">Max HP
+          <label>Max HP
             <input id="edMax" type="number" min="1" value="${m.maxHP}" />
           </label>
-          <label class="dlg-row">Current HP
+          <label>Current HP
             <input id="edCur" type="number" min="0" value="${m.currentHP}" />
           </label>
         </div>
 
-        <div class="dlg-row">
-          <label style="display:block;margin-bottom:6px;">Conditions</label>
-          <select id="edConds" multiple size="6" style="width:100%;">${
-            conditionsList.map(c => `<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('')
-          }</select>
-        </div>
-
-        <div class="dlg-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <img src="${m.image || defaultImage}" alt="Preview" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #2a2a31;"
-               onerror="this.onerror=null; this.src='${defaultImage}'">
-          <input id="edImg" type="file" accept="image/*" style="display:none" />
-          <button id="edChoose" type="button" class="ghost">Choose New Image</button>
-          <button id="edRemove" type="button" class="ghost">Remove Image</button>
-        </div>
-
-        <div class="dlg-actions">
-          <button id="edDelete" type="button" class="danger">Delete</button>
-          <span style="flex:1"></span>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
           <button id="edCancel" type="button" class="ghost">Cancel</button>
           <button id="edSave" type="submit">Save</button>
         </div>
@@ -190,18 +170,6 @@
     `;
     document.body.appendChild(dlg);
 
-    const edImg = dlg.querySelector('#edImg');
-    dlg.querySelector('#edChoose').onclick = () => edImg.click();
-    dlg.querySelector('#edRemove').onclick = () => {
-      m.image = defaultImage;
-      dlg.querySelector('img').src = defaultImage;
-    };
-    dlg.querySelector('#edDelete').onclick = () => {
-      if(confirm(`Are you sure you want to delete ${m.name}?`)){
-        monsters = monsters.filter(x=>x.id!==id);
-        save(); render(); dlg.close();
-      }
-    };
     dlg.querySelector('#edCancel').onclick = () => dlg.close();
 
     dlg.querySelector('#edSave').onclick = (e) => {
@@ -210,31 +178,23 @@
       const newAC   = Number(dlg.querySelector('#edAC').value);
       const newMax  = Math.max(1, Number(dlg.querySelector('#edMax').value));
       let   newCur  = Math.max(0, Number(dlg.querySelector('#edCur').value));
-      const newConds = [...dlg.querySelector('#edConds').options].filter(o=>o.selected).map(o=>o.value);
 
       if(newName) m.name = newName;
       if(!Number.isNaN(newAC)) m.ac = newAC;
       if(!Number.isNaN(newMax)) m.maxHP = newMax;
       if(!Number.isNaN(newCur)) m.currentHP = newCur;
+
+      // Clamp current HP within [0, maxHP]
       if(m.currentHP > m.maxHP) m.currentHP = m.maxHP;
+      if(m.currentHP < 0) m.currentHP = 0;
 
-      m.conditions = newConds;
-
-      const file = edImg.files && edImg.files[0];
-      if(file){
-        const reader = new FileReader();
-        reader.onload  = () => { m.image = reader.result || defaultImage; save(); render(); dlg.close(); };
-        reader.onerror = () => { m.image = defaultImage; save(); render(); dlg.close(); };
-        try { reader.readAsDataURL(file); }
-        catch { m.image = defaultImage; save(); render(); dlg.close(); }
-      } else {
-        save(); render(); dlg.close();
-      }
+      save(); render(); dlg.close();
     };
 
     dlg.addEventListener('close', ()=> dlg.remove());
     dlg.showModal();
   }
+  /* -------------------------------------------------------------------------- */
 
   function escapeHtml(s){return String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
 
@@ -284,6 +244,7 @@
       const dmgInput = row.querySelector('.dmg');
       const healInput = row.querySelector('.heal');
 
+      // Buttons (click + touchstart for iPad reliability)
       const dmgBtn = row.querySelector('.do-dmg');
       const healBtn = row.querySelector('.do-heal');
       ['click','touchstart'].forEach(evt=>{
@@ -297,6 +258,7 @@
         }, {passive:false});
       });
 
+      // Enter-to-apply
       dmgInput.addEventListener('keypress',e=>{
         if(e.key==='Enter'){ e.preventDefault(); const v=Number(dmgInput.value||0); if(v>0) damage(id,v); }
       });
@@ -304,6 +266,7 @@
         if(e.key==='Enter'){ e.preventDefault(); const v=Number(healInput.value||0); if(v>0) heal(id,v); }
       });
 
+      // Conditions
       const condSel = row.querySelector('.condSelect');
       condSel.onchange = () => {
         const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
@@ -311,6 +274,7 @@
       };
       row.querySelector('.clear-cond').onclick = (e)=>{ e.preventDefault(); updateConditions(id,[]); };
 
+      // Edit / Delete
       row.querySelectorAll('.mini-btn').forEach(btn=>{
         btn.addEventListener('click', e=>{
           e.preventDefault();
