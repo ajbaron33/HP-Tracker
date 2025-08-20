@@ -64,8 +64,8 @@
       <div><strong>${skull}${m.name}</strong> (AC ${m.ac})</div>
       ${bloodied&&!down?`<div class="bloodied">⚠️ Bloodied</div>`:''}
       <div>HP: ${m.currentHP}/${m.maxHP}</div>
-      <input class="dmg" type="number" placeholder="dmg"/> <button class="do-dmg">Damage</button>
-      <input class="heal" type="number" placeholder="heal"/> <button class="do-heal">Heal</button>
+      <input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button>
+      <input class="heal" type="number" placeholder="Heal"/> <button class="do-heal">Heal</button>
       <div>
         <select class="condSelect" multiple size="4">${condOptions}</select>
         <button class="clear-cond" type="button">Clear Conditions</button>
@@ -99,7 +99,7 @@
     e.preventDefault();
     addMonster($('#name').value,$('#hp').value,$('#ac').value);
     e.target.reset();
-    $('#name').focus();   // 👈 focus back on Monster name
+    $('#name').focus(); // put cursor back into Monster name
   });
 
   $('#clearAll').addEventListener('click',()=>{
