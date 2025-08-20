@@ -12,14 +12,22 @@
   input[type=number]::-webkit-outer-spin-button,
   input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
   input[type=number]{ -moz-appearance: textfield; }
-  .row{margin:8px 0;padding:8px;border-radius:10px;}
+
+  #list{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px;margin-top:12px;}
+  @media (max-width: 600px){ #list{grid-template-columns:1fr;} }
+
+  .row{margin:8px 0;padding:8px;border-radius:10px;display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;}
   .row.alive{background:#0e1a12;}
   .row.down{background:#1f0f12;}
   .row.bloodied{background:#3a3100;}
+
+  .thumb-wrap{width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid #2a2a31;background:#0f1113;display:flex;align-items:center;justify-content:center;}
+  .thumb{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb-placeholder{font-size:11px;color:#9aa0a6;text-align:center;padding:4px;}
+
+  .name-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .bloodied{color:#ff6b6b;font-weight:600;}
   .conditions{margin-top:6px;font-size:0.9em;color:#d4d4d4;}
-  #list{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px;margin-top:12px;}
-  @media (max-width: 600px){ #list{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
@@ -28,6 +36,7 @@
     <input id="name" placeholder="Monster name" required />
     <input id="hp" type="number" placeholder="Max HP" min="1" required />
     <input id="ac" type="number" placeholder="AC" />
+    <input id="img" type="file" accept="image/*" />
     <button type="submit">Add</button>
     <button id="clearAll" type="button">Clear All Monsters</button>
   </form>
@@ -35,18 +44,29 @@
 <div id="list"></div>
 <script>(()=>{
   const $=s=>document.querySelector(s);
-  const storeKey='monster_hp_v3';
+  const storeKey='monster_hp_v4'; // bump version to keep old data safe
   let monsters=load();
 
   const conditionsList=["Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
 
   function save(){localStorage.setItem(storeKey,JSON.stringify(monsters));}
-  function load(){try{const raw=localStorage.getItem(storeKey);return raw?JSON.parse(raw):[];}catch{return[];}}
+  function load(){
+    try{
+      // try latest, else migrate from older keys
+      const raw = localStorage.getItem(storeKey)
+               || localStorage.getItem('monster_hp_v3')
+               || localStorage.getItem('monster_hp_v2')
+               || localStorage.getItem('monster_hp_v1');
+      const arr = raw ? JSON.parse(raw) : [];
+      // ensure each record has img field
+      return Array.isArray(arr) ? arr.map(m=>({ ...m, img: m.img ?? null })) : [];
+    }catch{return[];}
+  }
 
-  function addMonster(name,maxHP,ac=0){
+  function addMonster(name,maxHP,ac=0,imgData=null){
     name=name.trim(); maxHP=Number(maxHP);
     if(!name||!maxHP) return;
-    monsters.push({id:crypto.randomUUID(),name,maxHP,currentHP:maxHP,ac:Number(ac)||0,conditions:[]});
+    monsters.push({id:crypto.randomUUID(),name,maxHP,currentHP:maxHP,ac:Number(ac)||0,conditions:[],img:imgData});
     save(); render();
   }
   function damage(id,amt){const m=monsters.find(m=>m.id===id);if(!m)return;m.currentHP=Math.max(0,m.currentHP-amt);save();render();}
@@ -60,17 +80,25 @@
     const skull=down?"💀 ":"";
     const condOptions=conditionsList.map(c=>`<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('');
     const condDisplay=m.conditions.length?`<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>`:"";
+
+    const thumb = m.img
+      ? `<a class="thumb-wrap" href="${m.img}" target="_blank" rel="noopener"><img class="thumb" src="${m.img}" alt="Monster image" /></a>`
+      : `<div class="thumb-wrap"><div class="thumb-placeholder">IMG</div></div>`;
+
     return `<div class="${cls}" data-id="${m.id}">
-      <div><strong>${skull}${m.name}</strong> (AC ${m.ac})</div>
-      ${bloodied&&!down?`<div class="bloodied">⚠️ Bloodied</div>`:''}
-      <div>HP: ${m.currentHP}/${m.maxHP}</div>
-      <input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button>
-      <input class="heal" type="number" placeholder="Heal"/> <button class="do-heal">Heal</button>
+      ${thumb}
       <div>
-        <select class="condSelect" multiple size="4">${condOptions}</select>
-        <button class="clear-cond" type="button">Clear Conditions</button>
+        <div class="name-line"><strong>${skull}${m.name}</strong> <span>(AC ${m.ac})</span></div>
+        ${bloodied&&!down?`<div class="bloodied">⚠️ Bloodied</div>`:''}
+        <div>HP: ${m.currentHP}/${m.maxHP}</div>
+        <input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button>
+        <input class="heal" type="number" placeholder="Heal"/> <button class="do-heal">Heal</button>
+        <div>
+          <select class="condSelect" multiple size="4">${condOptions}</select>
+          <button class="clear-cond" type="button">Clear Conditions</button>
+        </div>
+        ${condDisplay}
       </div>
-      ${condDisplay}
     </div>`;
   }
 
@@ -95,11 +123,29 @@
     });
   }
 
+  // Add form: read image (if any) into a persistent data URL, then add monster
   $('#addForm').addEventListener('submit',e=>{
     e.preventDefault();
-    addMonster($('#name').value,$('#hp').value,$('#ac').value);
-    e.target.reset();
-    $('#name').focus(); // put cursor back into Monster name
+    const name=$('#name').value;
+    const hp=$('#hp').value;
+    const ac=$('#ac').value;
+    const fileInput=$('#img');
+    const file=fileInput && fileInput.files && fileInput.files[0];
+
+    if(file){
+      const reader=new FileReader();
+      reader.onload=()=>{ addMonster(name,hp,ac,reader.result); afterAdd(); };
+      reader.onerror=()=>{ addMonster(name,hp,ac,null); afterAdd(); };
+      reader.readAsDataURL(file); // persistable across sessions via localStorage
+    }else{
+      addMonster(name,hp,ac,null);
+      afterAdd();
+    }
+
+    function afterAdd(){
+      e.target.reset();
+      $('#name').focus(); // back to Monster name field
+    }
   });
 
   $('#clearAll').addEventListener('click',()=>{
