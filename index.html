@@ -4,90 +4,107 @@
   <meta charset="UTF-8">
   <title>Monster HP Tracker</title>
   <style>
-    /* Base dark theme */
     body {
-      font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      margin: 20px;
-      background: #0b0b0c;
-      color: #e8eaed;
+      font-family: Arial, sans-serif;
+      margin: 15px;
+      background: #1e1e1e;
+      color: #f0f0f0;
     }
-    h1 { text-align: center; color: #e8eaed; }
-
-    /* Form */
-    #monsterForm {
-      display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px;
-      background: #131316; border: 1px solid #2a2a31; border-radius: 12px; padding: 12px;
+    h1 { 
+      text-align: center; 
+      font-size: 20px;
+      margin-bottom: 15px;
     }
-    #monsterForm input,
-    #monsterForm button {
-      padding: 8px; font-size: 14px; border-radius: 8px; border: 1px solid #2a2a31;
-      background: #1f1f24; color: #e8eaed; cursor: pointer;
+    #monsterForm { 
+      display: flex; 
+      flex-wrap: wrap; 
+      gap: 6px; 
+      justify-content: center; 
+      margin-bottom: 15px; 
     }
-    /* Remove spinner arrows on number inputs (all browsers) */
-    input[type=number]::-webkit-outer-spin-button,
-    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-    input[type=number]{ -moz-appearance: textfield; appearance: textfield; }
-
-    /* Grid of monsters */
-    #monsters { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 15px; }
-
-    /* Monster cards (dark variants for states) */
-    .monster {
-      border: 1px solid #2a2a31; border-radius: 10px; padding: 10px;
-      background: #0e1a12; /* alive: green-ish dark */
-      position: relative;
+    #monsterForm input, 
+    #monsterForm button { 
+      padding: 4px 6px; 
+      font-size: 12px; 
+      background: #2a2a2a; 
+      border: 1px solid #444; 
+      color: #f0f0f0; 
+      border-radius: 4px; 
     }
-    .monster.bloodied { background: #3a3100; } /* yellow-ish dark */
-    .monster.dead { background: #1f0f12; }     /* red-ish dark */
-
-    .monster h2 { margin: 0; font-size: 18px; color: #e8eaed; }
-    .bloodied-note { color: #ff6b6b; font-weight: 600; }
-
-    .controls { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-    .controls input {
-      width: 80px; padding: 6px; font-size: 14px; border-radius: 8px;
-      border: 1px solid #2a2a31; background: #1f1f24; color: #e8eaed;
+    #monsterForm button:hover { background: #444; cursor: pointer; }
+    #monsters { 
+      display: grid; 
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+      gap: 10px; 
     }
-
-    /* Thumbnail */
-    .monster img {
-      width: 56px; height: 56px; object-fit: cover; border-radius: 8px; cursor: pointer;
-      border: 1px solid #2a2a31; background: #0f1113;
+    .monster { 
+      border: 1px solid #555; 
+      border-radius: 6px; 
+      padding: 8px; 
+      background: #2e2e2e; 
+      font-size: 13px;
+      position: relative; 
+    }
+    .monster.bloodied { background: #5a4a00; }
+    .monster.dead { background: #5a0000; }
+    .monster h2 { margin: 0; font-size: 14px; }
+    .bloodied-note { color: #ff8080; font-weight: bold; font-size: 12px; }
+    .controls { 
+      margin-top: 6px; 
+      display: flex; 
+      flex-wrap: wrap; 
+      gap: 4px; 
+      align-items: center; 
+    }
+    .controls input { 
+      width: 55px; 
+      padding: 3px; 
+      font-size: 12px; 
+      border: 1px solid #444; 
+      background: #1e1e1e; 
+      color: #f0f0f0; 
+      border-radius: 4px; 
+    }
+    .monster img { 
+      width: 40px; 
+      height: 40px; 
+      object-fit: cover; 
+      border-radius: 4px; 
+      cursor: pointer; 
+      margin-top: 5px; 
     }
     .img-wrapper { position: relative; display: inline-block; }
     .img-dead::after {
-      content: "✖";
-      color: rgba(255,0,0,0.85);
-      font-size: 42px; font-weight: bold;
-      position: absolute; inset: 0;
+      content: "X";
+      color: red;
+      font-size: 28px;
+      font-weight: bold;
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
       display: flex; align-items: center; justify-content: center;
-      pointer-events: none;
+      background: rgba(0,0,0,0.4);
     }
-
-    .conditions { margin-top: 8px; }
-    .conditions select {
-      background: #1f1f24; color: #e8eaed; border: 1px solid #2a2a31; border-radius: 8px; padding: 6px;
+    .conditions { margin-top: 6px; font-size: 12px; }
+    select.condSelect { 
+      background: #1e1e1e; 
+      color: #f0f0f0; 
+      font-size: 12px; 
+      border: 1px solid #444; 
+      border-radius: 4px; 
     }
-    .conditions button {
-      background: #1f1f24; color: #e8eaed; border: 1px solid #2a2a31; border-radius: 8px; padding: 6px 10px; cursor: pointer;
+    .edit-btn, .clear-btn, .image-btn {
+      font-size: 11px;
+      padding: 4px 6px;
+      margin-top: 5px;
+      background: #333;
+      border: 1px solid #555;
+      border-radius: 4px;
+      color: #f0f0f0;
+      cursor: pointer;
     }
-
-    .edit-btn {
-      font-size: 12px; margin-top: 5px;
-      background: #1f1f24; color: #e8eaed; border: 1px solid #2a2a31; border-radius: 8px; padding: 6px 10px; cursor: pointer;
-    }
-
-    .clear-btn {
-      margin-top: 20px; display: block; margin-left: auto; margin-right: auto; padding: 8px 12px; font-size: 14px;
-      background: #1f1f24; color: #e8eaed; border: 1px solid #2a2a31; border-radius: 8px; cursor: pointer;
-    }
-
-    /* Choose Image button */
-    .image-btn {
-      padding: 8px 10px; font-size: 14px; cursor: pointer;
-      background: #1f1f24; color: #e8eaed; border: 1px solid #2a2a31; border-radius: 8px;
-    }
-    .image-btn.selected { background-color: #0b5bd3; color: #fff; }
+    .edit-btn:hover, .clear-btn:hover, .image-btn:hover { background: #555; }
+    .clear-btn { margin: 15px auto; display: block; }
+    .image-btn.selected { background: #007bff; color: white; }
   </style>
 </head>
 <body>
@@ -95,23 +112,22 @@
 
   <form id="monsterForm">
     <input type="text" id="name" placeholder="Monster Name" required>
-    <input type="number" id="hp" placeholder="Hit Points" required>
+    <input type="number" id="hp" placeholder="HP" required>
     <input type="number" id="ac" placeholder="AC" required>
     <input type="file" id="image" accept="image/*" style="display: none;">
-    <button type="button" id="imageBtn" class="image-btn">Choose Image</button>
-    <button type="submit">Add Monster</button>
+    <button type="button" id="imageBtn" class="image-btn">Choose Img</button>
+    <button type="submit">Add</button>
   </form>
 
   <div id="monsters"></div>
-  <button class="clear-btn" onclick="clearAll()">Clear All Monsters</button>
+  <button class="clear-btn" onclick="clearAll()">Clear All</button>
 
   <script>
     let monsters = [];
-    let pendingFocus = null; // { id: string, field: 'dmg' | 'heal' }
+    let pendingFocus = null; 
     let imageData = null;
     const defaultImage = "https://raw.githubusercontent.com/ajbaron33/HP-Tracker/main/default.png";
 
-    // Choose image
     document.getElementById("imageBtn").addEventListener("click", () => {
       document.getElementById("image").click();
     });
@@ -119,20 +135,17 @@
     document.getElementById("image").addEventListener("change", (e) => {
       if (e.target.files && e.target.files[0]) {
         const reader = new FileReader();
-        reader.onload = function(ev) {
-          imageData = ev.target.result;
-        };
+        reader.onload = ev => imageData = ev.target.result;
         reader.readAsDataURL(e.target.files[0]);
-        document.getElementById("imageBtn").textContent = "Image Selected";
+        document.getElementById("imageBtn").textContent = "Img ✔";
         document.getElementById("imageBtn").classList.add("selected");
       } else {
         imageData = null;
-        document.getElementById("imageBtn").textContent = "Choose Image";
+        document.getElementById("imageBtn").textContent = "Choose Img";
         document.getElementById("imageBtn").classList.remove("selected");
       }
     });
 
-    // Add monster
     document.getElementById("monsterForm").addEventListener("submit", function(e) {
       e.preventDefault();
       const name = document.getElementById("name").value;
@@ -142,11 +155,10 @@
 
       monsters.push({ id, name, hp, maxHp: hp, ac, conditions: [], image: imageData || defaultImage });
       imageData = null;
-      document.getElementById("imageBtn").textContent = "Choose Image";
+      document.getElementById("imageBtn").textContent = "Choose Img";
       document.getElementById("imageBtn").classList.remove("selected");
       this.reset();
       render();
-
       document.getElementById("name").focus();
     });
 
@@ -159,7 +171,6 @@
         div.className = "monster row";
         if (mon.hp <= 0) div.classList.add("dead");
         else if (mon.hp <= mon.maxHp / 2) div.classList.add("bloodied");
-
         div.dataset.id = mon.id;
 
         div.innerHTML = `
@@ -170,7 +181,7 @@
           <p>HP: ${mon.hp} / ${mon.maxHp}</p>
           ${mon.hp <= mon.maxHp/2 && mon.hp > 0 ? '<p class="bloodied-note">Bloodied</p>' : ''}
           <div class="controls">
-            <input type="number" placeholder="Damage" class="dmg">
+            <input type="number" placeholder="Dmg" class="dmg">
             <input type="number" placeholder="Heal" class="heal">
           </div>
           <div class="conditions">
@@ -182,7 +193,6 @@
           <button class="edit-btn" onclick="editMonster(${mon.id})">Edit/Delete</button>
         `;
 
-        // Wire damage/heal inputs
         const dmgInput = div.querySelector(".dmg");
         const healInput = div.querySelector(".heal");
 
@@ -194,12 +204,9 @@
               pendingFocus = { id: mon.id, field: "dmg" };
               damage(mon.id, v);
               dmgInput.value = "";
-            } else {
-              dmgInput.focus();
             }
           }
         });
-
         healInput.addEventListener("keypress", e => {
           if (e.key === "Enter") {
             e.preventDefault();
@@ -208,28 +215,21 @@
               pendingFocus = { id: mon.id, field: "heal" };
               heal(mon.id, v);
               healInput.value = "";
-            } else {
-              healInput.focus();
             }
           }
         });
-
         div.querySelector(".condSelect").addEventListener("change", (e) => {
           mon.conditions = Array.from(e.target.selectedOptions).map(o => o.value);
         });
-
         container.appendChild(div);
       });
 
-      // restore focus if needed
       if (pendingFocus) {
         const { id: focusId, field } = pendingFocus;
         const rowEl = document.querySelector(`.row[data-id="${focusId}"]`);
         if (rowEl) {
           const inputEl = rowEl.querySelector(field === "dmg" ? ".dmg" : ".heal");
-          if (inputEl) {
-            setTimeout(() => { inputEl.focus(); }, 0);
-          }
+          if (inputEl) setTimeout(() => { inputEl.focus(); }, 0);
         }
         pendingFocus = null;
       }
@@ -239,46 +239,30 @@
       monsters = monsters.map(m => m.id===id ? {...m, hp: Math.max(0, m.hp - amt)} : m);
       render();
     }
-
     function heal(id, amt) {
       monsters = monsters.map(m => m.id===id ? {...m, hp: Math.min(m.maxHp, m.hp + amt)} : m);
       render();
     }
-
     function clearConditions(id) {
       monsters = monsters.map(m => m.id===id ? {...m, conditions: []} : m);
       render();
     }
-
     function editMonster(id) {
       const mon = monsters.find(m => m.id === id);
       if (!mon) return;
-
       const newName = prompt("Edit name:", mon.name);
       if (newName === null) return;
-
       const newHp = parseInt(prompt("Edit HP:", mon.hp));
       if (isNaN(newHp)) return;
-
       const newAc = parseInt(prompt("Edit AC:", mon.ac));
       if (isNaN(newAc)) return;
-
       monsters = monsters.map(m => m.id === id ? {...m, name: newName, hp: newHp, maxHp: Math.max(m.maxHp, newHp), ac: newAc} : m);
-
-      if (confirm(`Delete ${newName}?`)) {
-        monsters = monsters.filter(m => m.id !== id);
-      }
-
+      if (confirm(`Delete ${newName}?`)) monsters = monsters.filter(m => m.id !== id);
       render();
     }
-
     function clearAll() {
-      if (confirm("Are you sure you want to clear all monsters?")) {
-        monsters = [];
-        render();
-      }
+      if (confirm("Clear all monsters?")) { monsters = []; render(); }
     }
-
     render();
   </script>
 </body>
