@@ -151,7 +151,12 @@
 
   function duplicateMonster(id){
     const m = monsters.find(x=>x.id===id); if(!m) return;
-    const dup = { ...m, id: genId(), name: nextDuplicateName(m.name) };
+    const dup = { 
+      ...m, 
+      id: genId(), 
+      name: nextDuplicateName(m.name),
+      image: m.image || defaultImage // ensure image is copied
+    };
     monsters.push(dup);
     save(); render();
   }
