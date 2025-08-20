@@ -63,7 +63,7 @@
 <script>
 (()=>{
   const $ = s => document.querySelector(s);
-  const storeKey = 'monster_hp_v11';
+  const storeKey = 'monster_hp_v12_focus_open';
   const defaultImage = new URL('default-monster.png', location.href).href; // robust relative URL
 
   const genId = () =>
@@ -73,6 +73,9 @@
 
   let monsters = load();
   let tempImage = null;
+
+  // track which input to refocus after a render
+  let pendingFocus = null; // { id: string, field: 'dmg' | 'heal' }
 
   const conditionsList = [
     "Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled",
@@ -208,8 +211,10 @@
     ).join('');
     const condDisplay = m.conditions.length ? `<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>` : "";
 
+    // We render an <a> wrapper for structure, but rely on an explicit click handler (below)
+    // to call window.open() so it works reliably on iPad/iOS for data URLs & blobs.
     const thumb = `
-      <a class="thumb-wrap ${down ? 'thumb-x' : ''}" href="${m.image || defaultImage}" target="_blank" rel="noopener">
+      <a class="thumb-wrap ${down ? 'thumb-x' : ''}" href="${m.image || defaultImage}" data-img="${m.image || defaultImage}" target="_blank" rel="noopener">
         <img class="thumb" src="${m.image || defaultImage}" alt="Monster image"
              onerror="this.onerror=null; this.src='${defaultImage}'"/>
       </a>`;
@@ -241,8 +246,19 @@
 
     list.querySelectorAll('.row').forEach(row=>{
       const id = row.dataset.id;
+      const m  = monsters.find(x=>x.id===id);
       const dmgInput = row.querySelector('.dmg');
       const healInput = row.querySelector('.heal');
+
+      // Thumbnail click -> window.open (reliable for user-supplied images/data URLs on mobile)
+      const thumb = row.querySelector('.thumb-wrap');
+      if (thumb){
+        const imgUrl = m?.image || defaultImage;
+        thumb.addEventListener('click', (e)=>{
+          e.preventDefault();
+          try { window.open(imgUrl, '_blank', 'noopener'); } catch {}
+        });
+      }
 
       // Buttons (click + touchstart for iPad reliability)
       const dmgBtn = row.querySelector('.do-dmg');
@@ -250,20 +266,54 @@
       ['click','touchstart'].forEach(evt=>{
         dmgBtn.addEventListener(evt, e=>{
           e.preventDefault();
-          const v = Number(dmgInput.value||0); if(v>0) damage(id,v);
+          const v = Number(dmgInput.value||0);
+          if(v>0){
+            pendingFocus = { id, field: 'dmg' };
+            damage(id,v);
+            dmgInput.value = '';
+          } else {
+            dmgInput.focus();
+          }
         }, {passive:false});
         healBtn.addEventListener(evt, e=>{
           e.preventDefault();
-          const v = Number(healInput.value||0); if(v>0) heal(id,v);
+          const v = Number(healInput.value||0);
+          if(v>0){
+            pendingFocus = { id, field: 'heal' };
+            heal(id,v);
+            healInput.value = '';
+          } else {
+            healInput.focus();
+          }
         }, {passive:false});
       });
 
-      // Enter-to-apply
+      // Enter-to-apply + keep focus
       dmgInput.addEventListener('keypress',e=>{
-        if(e.key==='Enter'){ e.preventDefault(); const v=Number(dmgInput.value||0); if(v>0) damage(id,v); }
+        if(e.key==='Enter'){
+          e.preventDefault();
+          const v=Number(dmgInput.value||0);
+          if(v>0){
+            pendingFocus = { id, field: 'dmg' };
+            damage(id,v);
+            dmgInput.value='';
+          }else{
+            dmgInput.focus();
+          }
+        }
       });
       healInput.addEventListener('keypress',e=>{
-        if(e.key==='Enter'){ e.preventDefault(); const v=Number(healInput.value||0); if(v>0) heal(id,v); }
+        if(e.key==='Enter'){
+          e.preventDefault();
+          const v=Number(healInput.value||0);
+          if(v>0){
+            pendingFocus = { id, field: 'heal' };
+            heal(id,v);
+            healInput.value='';
+          }else{
+            healInput.focus();
+          }
+        }
       });
 
       // Conditions
@@ -284,6 +334,17 @@
         });
       });
     });
+
+    // After re-render, restore focus if requested
+    if (pendingFocus) {
+      const { id: focusId, field } = pendingFocus;
+      const rowEl = document.querySelector(`.row[data-id="${focusId}"]`);
+      if (rowEl) {
+        const inputEl = rowEl.querySelector(field === 'dmg' ? '.dmg' : '.heal');
+        if (inputEl) setTimeout(() => { inputEl.focus(); }, 0);
+      }
+      pendingFocus = null;
+    }
   }
 
   // ADD form
@@ -311,7 +372,11 @@
     const file = e.target.files && e.target.files[0];
     if(file){
       const reader = new FileReader();
-      reader.onload = ev => { tempImage = ev.target.result; imgBtn.textContent = "Image Selected"; imgBtn.classList.add('selected'); };
+      reader.onload = ev => {
+        tempImage = ev.target.result;  // data URL; opening works via window.open on click
+        imgBtn.textContent = "Image Selected";
+        imgBtn.classList.add('selected');
+      };
       reader.readAsDataURL(file);
     } else {
       tempImage = null;
