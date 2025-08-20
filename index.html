@@ -48,7 +48,8 @@
     width:100%;
     height:auto;
     max-height:220px;
-    object-fit:cover;
+    object-fit:contain;   /* changed to contain */
+    background:#131316;   /* optional background behind letterboxing */
     margin-bottom:12px;
     border-radius:12px;
   }
@@ -86,10 +87,9 @@
 
   let monsters = load();
   let tempImage = null;
-  let pendingFocus = null; // { id: string, field: 'dmg' }
-  let imageJustPicked = false; // iPad quirk flag
+  let pendingFocus = null;
+  let imageJustPicked = false;
 
-  // --- small helper to submit the form robustly on iPad ---
   function submitForm() {
     const form = $('#addForm');
     if (form.requestSubmit) form.requestSubmit();
@@ -155,7 +155,7 @@
       ...m, 
       id: genId(), 
       name: nextDuplicateName(m.name),
-      image: m.image || defaultImage // ensure image is copied
+      image: m.image || defaultImage
     };
     monsters.push(dup);
     save(); render();
@@ -184,103 +184,6 @@
       monsters = monsters.filter(x=>x.id!==id);
       save(); render();
     }
-  }
-
-  function openEditDialog(id){
-    const m = monsters.find(x=>x.id===id); if(!m) return;
-
-    const dlg = document.createElement('dialog');
-    dlg.innerHTML = `
-      <form method="dialog">
-        <h3 style="margin:0 0 10px 0;">Edit ${escapeHtml(m.name)}</h3>
-
-        <div class="dlg-grid">
-          <label class="dlg-row">Name
-            <input id="edName" value="${escapeHtml(m.name)}" />
-          </label>
-          <label class="dlg-row">AC
-            <input id="edAC" type="number" min="0" value="${m.ac}" />
-          </label>
-
-          <label class="dlg-row">Max HP
-            <input id="edMax" type="number" min="1" value="${m.maxHP}" />
-          </label>
-          <label class="dlg-row">Current HP
-            <input id="edCur" type="number" min="0" value="${m.currentHP}" />
-          </label>
-        </div>
-
-        <div class="dlg-row">
-          <label style="display:block;margin-bottom:6px;">Conditions</label>
-          <select id="edConds" multiple size="6" style="width:100%;">${
-            conditionsList.map(c => `<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('')
-          }</select>
-        </div>
-
-        <div class="dlg-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <img src="${m.image || defaultImage}" alt="Preview" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #2a2a31;"
-               onerror="this.onerror=null; this.src='${defaultImage}'">
-          <input id="edImg" type="file" accept="image/*" style="display:none" />
-          <button id="edChoose" type="button" class="ghost">Choose New Image</button>
-          <button id="edRemove" type="button" class="ghost">Remove Image</button>
-        </div>
-
-        <div class="dlg-actions">
-          <button id="edDelete" type="button" class="danger">Delete</button>
-          <span style="flex:1"></span>
-          <button id="edCancel" type="button" class="ghost">Cancel</button>
-          <button id="edSave" type="submit">Save</button>
-        </div>
-      </form>
-    `;
-    document.body.appendChild(dlg);
-
-    const edImg = dlg.querySelector('#edImg');
-    dlg.querySelector('#edChoose').onclick = () => edImg.click();
-    dlg.querySelector('#edRemove').onclick = () => {
-      m.image = defaultImage;
-      dlg.querySelector('img').src = defaultImage;
-    };
-    dlg.querySelector('#edDelete').onclick = () => {
-      if(confirm(`Are you sure you want to delete ${m.name}?`)){
-        monsters = monsters.filter(x=>x.id!==id);
-        save(); render(); dlg.close();
-      }
-    };
-    dlg.querySelector('#edCancel').onclick = () => dlg.close();
-
-    dlg.querySelector('#edSave').onclick = (e) => {
-      e.preventDefault();
-      const newName = dlg.querySelector('#edName').value.trim();
-      const newAC   = Number(dlg.querySelector('#edAC').value);
-      const newMax  = Math.max(1, Number(dlg.querySelector('#edMax').value));
-      let   newCur  = Math.max(0, Number(dlg.querySelector('#edCur').value));
-      const newConds = [...dlg.querySelector('#edConds').options].filter(o=>o.selected).map(o=>o.value);
-
-      if(newName) m.name = newName;
-      if(!Number.isNaN(newAC)) m.ac = newAC;
-      if(!Number.isNaN(newMax)) m.maxHP = newMax;
-      if(!Number.isNaN(newCur)) m.currentHP = newCur;
-
-      if(m.currentHP > m.maxHP) m.currentHP = m.maxHP;
-      if(m.currentHP < 0) m.currentHP = 0;
-
-      m.conditions = newConds;
-
-      const file = edImg.files && edImg.files[0];
-      if(file){
-        const reader = new FileReader();
-        reader.onload  = () => { m.image = reader.result || defaultImage; save(); render(); dlg.close(); };
-        reader.onerror = () => { m.image = defaultImage; save(); render(); dlg.close(); };
-        try { reader.readAsDataURL(file); }
-        catch { m.image = defaultImage; save(); render(); dlg.close(); }
-      } else {
-        save(); render(); dlg.close();
-      }
-    };
-
-    dlg.addEventListener('close', ()=> dlg.remove());
-    dlg.showModal();
   }
 
   function escapeHtml(s){return String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
@@ -332,7 +235,6 @@
       const dmgInput = row.querySelector('.dmg');
       const healInput = row.querySelector('.heal');
 
-      // Buttons (click + touchstart for iPad reliability)
       const dmgBtn = row.querySelector('.do-dmg');
       const healBtn = row.querySelector('.do-heal');
       ['click','touchstart'].forEach(evt=>{
@@ -359,7 +261,6 @@
         }, {passive:false});
       });
 
-      // Enter-to-apply — keep focus in Damage box
       dmgInput.addEventListener('keypress',e=>{
         if(e.key==='Enter'){
           e.preventDefault();
@@ -386,7 +287,6 @@
         }
       });
 
-      // Conditions
       const condSel = row.querySelector('.condSelect');
       condSel.onchange = () => {
         const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
@@ -394,7 +294,6 @@
       };
       row.querySelector('.clear-cond').onclick = (e)=>{ e.preventDefault(); updateConditions(id,[]); };
 
-      // Edit / Delete / Duplicate
       row.querySelectorAll('button[data-action]').forEach(btn=>{
         btn.addEventListener('click', e=>{
           e.preventDefault();
@@ -406,7 +305,6 @@
       });
     });
 
-    // After re-render, restore focus for the damage input if requested
     if (pendingFocus) {
       const { id: focusId, field } = pendingFocus;
       const rowEl = document.querySelector(`.row[data-id="${focusId}"]`);
@@ -418,35 +316,30 @@
     }
   }
 
-  // Add monster form
   $('#addForm').addEventListener('submit', e=>{
     e.preventDefault();
     addMonster($('#name').value, $('#hp').value, $('#ac').value, tempImage || defaultImage);
     e.target.reset();
     tempImage = null;
-    imageJustPicked = false; // reset after successful add
+    imageJustPicked = false;
     $('#imgBtn').textContent = "Choose Image";
     $('#imgBtn').classList.remove('selected');
     $('#name').focus();
   });
 
-  // iPad-safe Add button: use only click + Enter key
   const addBtn = document.querySelector('#addForm button[type="submit"]');
   addBtn.addEventListener('click', () => { submitForm(); });
   addBtn.addEventListener('keydown', (e)=>{
     if (e.key === 'Enter') { e.preventDefault(); submitForm(); }
   });
 
-  // Clear all
   $('#clearAll').addEventListener('click',()=>{
     if(confirm('Are you sure you want to clear all monsters?')){
       monsters=[]; save(); render();
     }
   });
 
-  // Image choose for ADD
   $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());
-  // If Enter is pressed while image button has focus, submit the form (don’t reopen picker)
   $('#imgBtn').addEventListener('keydown',(e)=>{
     if(e.key === 'Enter'){
       e.preventDefault();
@@ -463,7 +356,7 @@
         $('#imgBtn').textContent="Image Selected";
         $('#imgBtn').classList.add("selected");
         $('#imgBtn').blur();
-        $('#name').focus(); // return focuses here, but Enter will submit due to handlers below
+        $('#name').focus();
       };
       reader.readAsDataURL(file);
     } else {
@@ -476,7 +369,6 @@
     }
   });
 
-  // If we just picked an image, pressing Enter anywhere should add the monster
   ['keydown','keypress','keyup'].forEach(evt=>{
     document.addEventListener(evt,(e)=>{
       if ((evt==='keydown' || evt==='keypress' || evt==='keyup') && e.key === 'Enter' && imageJustPicked){
