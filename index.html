@@ -11,22 +11,6 @@
   input[type=number]::-webkit-outer-spin-button,
   input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
   .banner{width:100%;height:auto;max-height:300px;object-fit:cover;border-radius:14px;margin-bottom:20px;}
-  .thumbnail-wrapper{position:relative;display:inline-block;}
-  .thumbnail-x{
-    position:absolute;
-    top:0;right:0;
-    color:#ff4d4d;
-    font-weight:bold;
-    background:#131316;
-    border-radius:50%;
-    padding:0 4px;
-    opacity:0.6;
-    transition:opacity 0.2s ease;
-    pointer-events:none; /* makes sure it can’t be clicked */
-  }
-  .thumbnail-wrapper:hover .thumbnail-x{
-    opacity:1;
-  }
 </style>
 </head>
 <body>
@@ -66,9 +50,14 @@ function render(){
     card.innerHTML=`
       <strong>${m.name}</strong> (AC ${m.ac})
       <div>HP: ${m.hp}</div>
-      <div class="thumbnail-wrapper">
+      <div style="position:relative;display:inline-block;">
         <img src="${m.image||defaultImage}" alt="" style="max-width:100px;border-radius:8px;">
-        <span class="thumbnail-x">✖</span>
+        <span
+              style="position:absolute;top:0;right:0;
+                     color:#ff4d4d;font-weight:bold;
+                     background:#131316;
+                     border-radius:50%;
+                     padding:0 4px;">✖</span>
       </div>
       <button onclick="removeMonster('${m.id}')">Remove</button>
       <button onclick="damage('${m.id}')">Damage</button>
@@ -133,7 +122,7 @@ function duplicateMonster(id){
     ...m, 
     id: genId(), 
     name: nextDuplicateName(m.name),
-    image: m.image || defaultImage
+    image: m.image || defaultImage // ensure user image (or default) is copied
   };
 
   monsters.push(dup);
