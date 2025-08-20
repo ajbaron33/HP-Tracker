@@ -99,6 +99,7 @@
     e.preventDefault();
     addMonster($('#name').value,$('#hp').value,$('#ac').value);
     e.target.reset();
+    $('#name').focus();   // 👈 focus back on Monster name
   });
 
   $('#clearAll').addEventListener('click',()=>{
