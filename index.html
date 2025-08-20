@@ -68,6 +68,7 @@
       <input class="heal" type="number" placeholder="heal"/> <button class="do-heal">Heal</button>
       <div>
         <select class="condSelect" multiple size="4">${condOptions}</select>
+        <button class="clear-cond" type="button">Clear Conditions</button>
       </div>
       ${condDisplay}
     </div>`;
@@ -89,6 +90,8 @@
         const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
         updateConditions(id,selected);
       };
+      const clearBtn=row.querySelector('.clear-cond');
+      clearBtn.onclick=(e)=>{e.preventDefault(); updateConditions(id, []);};
     });
   }
 
