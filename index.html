@@ -7,25 +7,36 @@
 <style>
   body{background:#0b0b0c;color:#e8eaed;font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:20px;}
   .card{background:#131316;border:1px solid #2a2a31;border-radius:14px;padding:12px;}
-  input,button,select{padding:8px;margin:4px;border-radius:8px;border:1px solid #2a2a31;background:#1f1f24;color:#e8eaed;}
-  input[type=file]{display:none;} /* hide actual file input */
 
+  input,button,select{padding:8px;margin:4px;border-radius:8px;border:1px solid #2a2a31;background:#1f1f24;color:#e8eaed;}
+  /* Remove spinner arrows on number inputs */
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
+  input[type=number]{ -moz-appearance: textfield; }
+
+  /* Layout */
   #list{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px;margin-top:12px;}
   @media (max-width: 600px){ #list{grid-template-columns:1fr;} }
 
+  /* Monster rows */
   .row{margin:8px 0;padding:8px;border-radius:10px;display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;}
   .row.alive{background:#0e1a12;}
   .row.down{background:#1f0f12;}
   .row.bloodied{background:#3a3100;}
+  .bloodied{color:#ff6b6b;font-weight:600;}
+  .conditions{margin-top:6px;font-size:0.9em;color:#d4d4d4;}
+  .name-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 
+  /* Thumbnail */
   .thumb-wrap{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid #2a2a31;background:#0f1113;display:flex;align-items:center;justify-content:center;}
   .thumb{width:100%;height:100%;object-fit:cover;display:block;}
   .thumb-placeholder{font-size:11px;color:#9aa0a6;text-align:center;padding:4px;}
-  .thumb-x::after{content:"✖";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:42px;color:rgba(255,0,0,0.8);pointer-events:none;}
+  .thumb-x::after{content:"✖";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:42px;color:rgba(255,0,0,0.85);pointer-events:none;}
 
-  .name-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-  .bloodied{color:#ff6b6b;font-weight:600;}
-  .conditions{margin-top:6px;font-size:0.9em;color:#d4d4d4;}
+  /* Image chooser button */
+  #img { display:none; }
+  #imgBtn { cursor:pointer; }
+  #imgBtn.selected { background:#0b5bd3; } /* blue */
 </style>
 </head>
 <body>
@@ -35,43 +46,77 @@
     <input id="hp" type="number" placeholder="Max HP" min="1" required />
     <input id="ac" type="number" placeholder="AC" />
     <input id="img" type="file" accept="image/*" />
-    <button type="button" id="chooseImgBtn">Choose Image</button>
+    <button type="button" id="imgBtn">Choose Image</button>
     <button type="submit">Add</button>
     <button id="clearAll" type="button">Clear All Monsters</button>
   </form>
 </div>
+
 <div id="list"></div>
-<script>(()=>{
+
+<script>
+(()=>{
   const $=s=>document.querySelector(s);
-  const storeKey='monster_hp_v5';
-  let monsters=load();
+  const storeKey='monster_hp_v6';
+  const STOCK_IMG = 'stock.png'; // <- put your purple silhouette here, or change the filename
+
+  const genId = () =>
+    (window.crypto && typeof crypto.randomUUID === "function")
+      ? crypto.randomUUID()
+      : ("id_" + Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+  let monsters = load();
 
   const conditionsList=["Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
 
-  function save(){localStorage.setItem(storeKey,JSON.stringify(monsters));}
+  function save(){ localStorage.setItem(storeKey, JSON.stringify(monsters)); }
   function load(){
     try{
-      const raw=localStorage.getItem(storeKey)||localStorage.getItem('monster_hp_v4');
-      const arr=raw?JSON.parse(raw):[];
-      return Array.isArray(arr)?arr.map(m=>({...m,img:m.img??null})):[];
-    }catch{return[];}
+      const raw = localStorage.getItem(storeKey)
+              || localStorage.getItem('monster_hp_v5')
+              || localStorage.getItem('monster_hp_v4')
+              || localStorage.getItem('monster_hp_v3');
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.map(m=>({...m, img: m.img ?? STOCK_IMG})) : [];
+    }catch{return [];}
   }
 
   function addMonster(name,maxHP,ac=0,imgData=null){
-    name=name.trim(); maxHP=Number(maxHP);
-    if(!name||!maxHP) return;
-    monsters.push({id:crypto.randomUUID(),name,maxHP,currentHP:maxHP,ac:Number(ac)||0,conditions:[],img:imgData});
+    name=(name||'').trim(); maxHP=Number(maxHP);
+    if(!name || !(maxHP>0)) return;
+    monsters.push({
+      id: genId(),
+      name,
+      maxHP,
+      currentHP: maxHP,
+      ac: Number(ac)||0,
+      conditions: [],
+      img: imgData || STOCK_IMG
+    });
     save(); render();
   }
-  function damage(id,amt){const m=monsters.find(m=>m.id===id);if(!m)return;m.currentHP=Math.max(0,m.currentHP-amt);save();render();}
-  function heal(id,amt){const m=monsters.find(m=>m.id===id);if(!m)return;m.currentHP=Math.min(m.maxHP,m.currentHP+amt);save();render();}
-  function updateConditions(id,selected){const m=monsters.find(m=>m.id===id);if(!m)return;m.conditions=selected;save();render();}
+  function damage(id,amt){
+    const m=monsters.find(x=>x.id===id); if(!m) return;
+    const n=Math.max(1, Number(amt||0));
+    m.currentHP = Math.max(0, m.currentHP - n);
+    save(); render();
+  }
+  function heal(id,amt){
+    const m=monsters.find(x=>x.id===id); if(!m) return;
+    const n=Math.max(1, Number(amt||0));
+    m.currentHP = Math.min(m.maxHP, m.currentHP + n);
+    save(); render();
+  }
+  function updateConditions(id,selected){
+    const i=monsters.findIndex(x=>x.id===id); if(i<0) return;
+    monsters[i].conditions = selected; save(); render();
+  }
 
   function rowTemplate(m){
-    const bloodied=m.currentHP<=m.maxHP/2&&m.currentHP>0;
-    const down=m.currentHP<=0;
-    const cls=down?"row down":bloodied?"row bloodied":"row alive";
-    const skull=down?"💀 ":"";
+    const bloodied = m.currentHP<=m.maxHP/2 && m.currentHP>0;
+    const down = m.currentHP<=0;
+    const cls = down ? "row down" : bloodied ? "row bloodied" : "row alive";
+    const skull = down ? "💀 " : "";
     const condOptions=conditionsList.map(c=>`<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('');
     const condDisplay=m.conditions.length?`<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>`:"";
 
@@ -98,7 +143,7 @@
 
   function render(){
     const list=$('#list');
-    list.innerHTML=monsters.map(rowTemplate).join('');
+    list.innerHTML = monsters.map(rowTemplate).join('');
     list.querySelectorAll('.row').forEach(row=>{
       const id=row.dataset.id;
       const dmgInput=row.querySelector('.dmg');
@@ -107,6 +152,7 @@
       row.querySelector('.do-heal').onclick=(e)=>{e.preventDefault();const v=Number(healInput.value||0);if(v>0)heal(id,v);};
       dmgInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(dmgInput.value||0);if(v>0)damage(id,v);}});
       healInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(healInput.value||0);if(v>0)heal(id,v);}});
+
       const condSel=row.querySelector('.condSelect');
       condSel.onchange=()=>{
         const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
@@ -116,33 +162,49 @@
     });
   }
 
-  // Image button triggers file input
-  $('#chooseImgBtn').addEventListener('click',()=>$('#img').click());
+  // Image chooser button behavior
+  const imgInput = document.getElementById('img');
+  const imgBtn   = document.getElementById('imgBtn');
+  imgBtn.addEventListener('click', ()=> imgInput.click());
+  imgInput.addEventListener('change', ()=>{
+    if (imgInput.files && imgInput.files.length){
+      imgBtn.textContent = "Image Selected";
+      imgBtn.classList.add('selected');
+    } else {
+      imgBtn.textContent = "Choose Image";
+      imgBtn.classList.remove('selected');
+    }
+  });
 
   // Add form submit
-  $('#addForm').addEventListener('submit',e=>{
+  $('#addForm').addEventListener('submit', e=>{
     e.preventDefault();
     const name=$('#name').value;
     const hp=$('#hp').value;
     const ac=$('#ac').value;
-    const file=$('#img').files[0];
 
-    if(file){
-      const reader=new FileReader();
-      reader.onload=()=>{ addMonster(name,hp,ac,reader.result); afterAdd(); };
-      reader.onerror=()=>{ addMonster(name,hp,ac,null); afterAdd(); };
-      reader.readAsDataURL(file);
-    }else{
-      addMonster(name,hp,ac,null);
-      afterAdd();
-    }
+    const file = (imgInput && imgInput.files && imgInput.files.length) ? imgInput.files[0] : null;
 
-    function afterAdd(){
+    const afterAdd = ()=>{
       e.target.reset();
+      imgBtn.textContent = "Choose Image";
+      imgBtn.classList.remove('selected');
       $('#name').focus();
+    };
+
+    if (file){
+      const reader = new FileReader();
+      reader.onload  = ()=>{ addMonster(name,hp,ac,reader.result); afterAdd(); };
+      reader.onerror = ()=>{ addMonster(name,hp,ac,STOCK_IMG);    afterAdd(); };
+      try { reader.readAsDataURL(file); }
+      catch { addMonster(name,hp,ac,STOCK_IMG); afterAdd(); }
+    } else {
+      addMonster(name,hp,ac,STOCK_IMG);
+      afterAdd();
     }
   });
 
+  // Clear all
   $('#clearAll').addEventListener('click',()=>{
     if(confirm('Are you sure you want to clear all monsters?')){
       monsters=[]; save(); render();
@@ -150,6 +212,7 @@
   });
 
   render();
-})();</script>
+})();
+</script>
 </body>
 </html>
