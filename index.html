@@ -8,10 +8,7 @@
   body{background:#0b0b0c;color:#e8eaed;font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:20px;}
   .card{background:#131316;border:1px solid #2a2a31;border-radius:14px;padding:12px;}
   input,button,select{padding:8px;margin:4px;border-radius:8px;border:1px solid #2a2a31;background:#1f1f24;color:#e8eaed;}
-  /* Remove spinner arrows on number inputs */
-  input[type=number]::-webkit-outer-spin-button,
-  input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
-  input[type=number]{ -moz-appearance: textfield; }
+  input[type=file]{display:none;} /* hide actual file input */
 
   #list{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px;margin-top:12px;}
   @media (max-width: 600px){ #list{grid-template-columns:1fr;} }
@@ -21,9 +18,10 @@
   .row.down{background:#1f0f12;}
   .row.bloodied{background:#3a3100;}
 
-  .thumb-wrap{width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid #2a2a31;background:#0f1113;display:flex;align-items:center;justify-content:center;}
+  .thumb-wrap{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid #2a2a31;background:#0f1113;display:flex;align-items:center;justify-content:center;}
   .thumb{width:100%;height:100%;object-fit:cover;display:block;}
   .thumb-placeholder{font-size:11px;color:#9aa0a6;text-align:center;padding:4px;}
+  .thumb-x::after{content:"✖";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:42px;color:rgba(255,0,0,0.8);pointer-events:none;}
 
   .name-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .bloodied{color:#ff6b6b;font-weight:600;}
@@ -37,6 +35,7 @@
     <input id="hp" type="number" placeholder="Max HP" min="1" required />
     <input id="ac" type="number" placeholder="AC" />
     <input id="img" type="file" accept="image/*" />
+    <button type="button" id="chooseImgBtn">Choose Image</button>
     <button type="submit">Add</button>
     <button id="clearAll" type="button">Clear All Monsters</button>
   </form>
@@ -44,7 +43,7 @@
 <div id="list"></div>
 <script>(()=>{
   const $=s=>document.querySelector(s);
-  const storeKey='monster_hp_v4'; // bump version to keep old data safe
+  const storeKey='monster_hp_v5';
   let monsters=load();
 
   const conditionsList=["Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
@@ -52,14 +51,9 @@
   function save(){localStorage.setItem(storeKey,JSON.stringify(monsters));}
   function load(){
     try{
-      // try latest, else migrate from older keys
-      const raw = localStorage.getItem(storeKey)
-               || localStorage.getItem('monster_hp_v3')
-               || localStorage.getItem('monster_hp_v2')
-               || localStorage.getItem('monster_hp_v1');
-      const arr = raw ? JSON.parse(raw) : [];
-      // ensure each record has img field
-      return Array.isArray(arr) ? arr.map(m=>({ ...m, img: m.img ?? null })) : [];
+      const raw=localStorage.getItem(storeKey)||localStorage.getItem('monster_hp_v4');
+      const arr=raw?JSON.parse(raw):[];
+      return Array.isArray(arr)?arr.map(m=>({...m,img:m.img??null})):[];
     }catch{return[];}
   }
 
@@ -82,8 +76,8 @@
     const condDisplay=m.conditions.length?`<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>`:"";
 
     const thumb = m.img
-      ? `<a class="thumb-wrap" href="${m.img}" target="_blank" rel="noopener"><img class="thumb" src="${m.img}" alt="Monster image" /></a>`
-      : `<div class="thumb-wrap"><div class="thumb-placeholder">IMG</div></div>`;
+      ? `<a class="thumb-wrap ${down?"thumb-x":""}" href="${m.img}" target="_blank" rel="noopener"><img class="thumb" src="${m.img}" alt="Monster image" /></a>`
+      : `<div class="thumb-wrap ${down?"thumb-x":""}"><div class="thumb-placeholder">IMG</div></div>`;
 
     return `<div class="${cls}" data-id="${m.id}">
       ${thumb}
@@ -118,25 +112,26 @@
         const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
         updateConditions(id,selected);
       };
-      const clearBtn=row.querySelector('.clear-cond');
-      clearBtn.onclick=(e)=>{e.preventDefault(); updateConditions(id, []);};
+      row.querySelector('.clear-cond').onclick=(e)=>{e.preventDefault(); updateConditions(id, []);};
     });
   }
 
-  // Add form: read image (if any) into a persistent data URL, then add monster
+  // Image button triggers file input
+  $('#chooseImgBtn').addEventListener('click',()=>$('#img').click());
+
+  // Add form submit
   $('#addForm').addEventListener('submit',e=>{
     e.preventDefault();
     const name=$('#name').value;
     const hp=$('#hp').value;
     const ac=$('#ac').value;
-    const fileInput=$('#img');
-    const file=fileInput && fileInput.files && fileInput.files[0];
+    const file=$('#img').files[0];
 
     if(file){
       const reader=new FileReader();
       reader.onload=()=>{ addMonster(name,hp,ac,reader.result); afterAdd(); };
       reader.onerror=()=>{ addMonster(name,hp,ac,null); afterAdd(); };
-      reader.readAsDataURL(file); // persistable across sessions via localStorage
+      reader.readAsDataURL(file);
     }else{
       addMonster(name,hp,ac,null);
       afterAdd();
@@ -144,15 +139,13 @@
 
     function afterAdd(){
       e.target.reset();
-      $('#name').focus(); // back to Monster name field
+      $('#name').focus();
     }
   });
 
   $('#clearAll').addEventListener('click',()=>{
     if(confirm('Are you sure you want to clear all monsters?')){
-      monsters=[];
-      save();
-      render();
+      monsters=[]; save(); render();
     }
   });
 
