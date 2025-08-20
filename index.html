@@ -21,7 +21,7 @@
   .thumb.dead{position:relative;}
   .thumb.dead::after{content:"✖";position:absolute;top:0;left:0;width:50px;height:50px;
     background:rgba(255,0,0,0.5);color:white;font-size:32px;text-align:center;line-height:50px;border-radius:6px;}
-  .edit-btn{font-size:0.8em;background:#444;margin-top:4px;}
+  .edit-btn{font-size:0.8em;background:#444;margin-left:6px;}
 </style>
 </head>
 <body>
@@ -40,8 +40,8 @@
 <script>
 (()=>{
   const $=s=>document.querySelector(s);
-  const storeKey='monster_hp_v4';
-  const defaultImage="https://ajbaron33.github.io/HP-Tracker/default-monster.png"; // stock image in repo
+  const storeKey='monster_hp_v5';
+  const defaultImage="https://ajbaron33.github.io/HP-Tracker/default-monster.png"; // must exist in repo
   let monsters=load();
   let tempImage=null;
 
@@ -59,7 +59,13 @@
   function damage(id,amt){const m=monsters.find(m=>m.id===id);if(!m)return;m.currentHP=Math.max(0,m.currentHP-amt);save();render();}
   function heal(id,amt){const m=monsters.find(m=>m.id===id);if(!m)return;m.currentHP=Math.min(m.maxHP,m.currentHP+amt);save();render();}
   function updateConditions(id,selected){const m=monsters.find(m=>m.id===id);if(!m)return;m.conditions=selected;save();render();}
-  function deleteMonster(id){monsters=monsters.filter(m=>m.id!==id);save();render();}
+  function deleteMonster(id){
+    const m=monsters.find(m=>m.id===id); if(!m) return;
+    if(confirm(`Are you sure you want to delete ${m.name}?`)){
+      monsters=monsters.filter(x=>x.id!==id);
+      save(); render();
+    }
+  }
   function editMonster(id){
     const m=monsters.find(m=>m.id===id); if(!m) return;
     const newName=prompt("Edit name:",m.name);
@@ -104,27 +110,12 @@
       const id=row.dataset.id;
       const dmgInput=row.querySelector('.dmg');
       const healInput=row.querySelector('.heal');
-      const dmgBtn=row.querySelector('.do-dmg');
-      const healBtn=row.querySelector('.do-heal');
-      [dmgBtn,healBtn].forEach(btn=>{
-        ["click","touchstart"].forEach(evt=>{
-          btn.addEventListener(evt,(e)=>{
-            e.preventDefault();
-            if(btn.classList.contains('do-dmg')){
-              const v=Number(dmgInput.value||0); if(v>0) damage(id,v);
-            } else {
-              const v=Number(healInput.value||0); if(v>0) heal(id,v);
-            }
-          });
-        });
-      });
+      row.querySelector('.do-dmg').onclick=(e)=>{e.preventDefault();const v=Number(dmgInput.value||0);if(v>0)damage(id,v);};
+      row.querySelector('.do-heal').onclick=(e)=>{e.preventDefault();const v=Number(healInput.value||0);if(v>0)heal(id,v);};
       dmgInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(dmgInput.value||0);if(v>0)damage(id,v);}});
       healInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(healInput.value||0);if(v>0)heal(id,v);}});
       const condSel=row.querySelector('.condSelect');
-      condSel.onchange=()=>{
-        const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
-        updateConditions(id,selected);
-      };
+      condSel.onchange=()=>{const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);updateConditions(id,selected);};
       row.querySelector('.clear-cond').onclick=(e)=>{e.preventDefault();updateConditions(id,[]);};
       row.querySelectorAll('.edit-btn').forEach(btn=>{
         btn.onclick=(e)=>{
@@ -152,7 +143,6 @@
     }
   });
 
-  // image button handling
   $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());
   $('#imgFile').addEventListener('change',e=>{
     const file=e.target.files[0];
