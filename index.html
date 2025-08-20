@@ -7,41 +7,37 @@
 <style>
   body{background:#0b0b0c;color:#e8eaed;font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:20px;}
   .card{background:#131316;border:1px solid #2a2a31;border-radius:14px;padding:12px;}
-
-  input,button,select{padding:8px;margin:4px;border-radius:8px;border:1px solid #2a2a31;background:#1f1f24;color:#e8eaed;cursor:pointer;}
-  /* Remove spinner arrows (all browsers) */
+  input,button,select{padding:8px;margin:4px;border-radius:8px;border:1px solid #2a2a31;background:#1f1f24;color:#e8eaed;}
   input[type=number]::-webkit-outer-spin-button,
-  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
-  input[type=number]{-moz-appearance:textfield;appearance:textfield;}
+  input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
+  input[type=number]{ -moz-appearance: textfield; }
+  button{cursor:pointer;}
+  .image-btn.selected{background:#0b5bd3;color:#fff;}
 
-  /* Grid */
   #list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px;}
-  @media (max-width:600px){#list{grid-template-columns:1fr;}}
+  @media (max-width: 600px){ #list{grid-template-columns:1fr;} }
 
-  /* Card */
   .row{margin:8px 0;padding:8px;border-radius:10px;display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;position:relative;}
-  .row.alive{background:#0e1a12;}      /* green-ish */
-  .row.down{background:#1f0f12;}       /* red-ish */
-  .row.bloodied{background:#3a3100;}   /* yellow-ish */
+  .row.alive{background:#0e1a12;}
+  .row.down{background:#1f0f12;}
+  .row.bloodied{background:#3a3100;}
   .bloodied{color:#ff6b6b;font-weight:600;}
   .conditions{margin-top:6px;font-size:0.9em;color:#d4d4d4;}
   .name-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 
-  /* Thumb + red X on death */
   .thumb-wrap{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid #2a2a31;background:#0f1113;display:flex;align-items:center;justify-content:center;}
   .thumb{width:100%;height:100%;object-fit:cover;display:block;}
   .thumb-x::after{content:"✖";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:42px;color:rgba(255,0,0,0.85);pointer-events:none;}
 
-  /* Small header buttons */
   .mini-btn{font-size:0.8em;background:#444;border-color:#555;margin-left:6px;}
-
-  /* Choose Image button */
-  #imgFile{display:none;}
-  .image-btn.selected{background:#0b5bd3;color:#fff;}
 
   /* Dialog */
   dialog{border:1px solid #2a2a31;background:#131316;color:#e8eaed;border-radius:12px;padding:16px;max-width:520px;width:calc(100% - 24px);}
   dialog::backdrop{background:rgba(0,0,0,0.55);}
+  .dlg-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .dlg-row{margin:8px 0;}
+  .dlg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
+  .danger{background:#7a1f25;border-color:#a43a42;}
   .ghost{background:#1b1b20;border-color:#2a2a31;}
 </style>
 </head>
@@ -51,7 +47,7 @@
     <input id="name" placeholder="Monster name" required />
     <input id="hp" type="number" placeholder="Max HP" min="1" required />
     <input id="ac" type="number" placeholder="AC" />
-    <input id="imgFile" type="file" accept="image/*" />
+    <input id="imgFile" type="file" accept="image/*" style="display:none" />
     <button id="imgBtn" type="button" class="image-btn">Choose Image</button>
     <button type="submit">Add</button>
     <button id="clearAll" type="button">Clear All Monsters</button>
@@ -63,8 +59,8 @@
 <script>
 (()=>{
   const $ = s => document.querySelector(s);
-  const storeKey = 'monster_hp_v12_focus_open';
-  const defaultImage = new URL('default-monster.png', location.href).href; // robust relative URL
+  const storeKey = 'monster_hp_v9';
+  const defaultImage = new URL('default-monster.png', location.href).href;
 
   const genId = () =>
     (window.crypto && typeof crypto.randomUUID === "function")
@@ -73,9 +69,6 @@
 
   let monsters = load();
   let tempImage = null;
-
-  // track which input to refocus after a render
-  let pendingFocus = null; // { id: string, field: 'dmg' | 'heal' }
 
   const conditionsList = [
     "Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled",
@@ -140,7 +133,6 @@
     }
   }
 
-  /* ---------- Simplified Edit dialog: Name, Max HP, Current HP, AC ---------- */
   function openEditDialog(id){
     const m = monsters.find(x=>x.id===id); if(!m) return;
 
@@ -149,23 +141,40 @@
       <form method="dialog">
         <h3 style="margin:0 0 10px 0;">Edit ${escapeHtml(m.name)}</h3>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <label>Name
+        <div class="dlg-grid">
+          <label class="dlg-row">Name
             <input id="edName" value="${escapeHtml(m.name)}" />
           </label>
-          <label>AC
+          <label class="dlg-row">AC
             <input id="edAC" type="number" min="0" value="${m.ac}" />
           </label>
 
-          <label>Max HP
+          <label class="dlg-row">Max HP
             <input id="edMax" type="number" min="1" value="${m.maxHP}" />
           </label>
-          <label>Current HP
+          <label class="dlg-row">Current HP
             <input id="edCur" type="number" min="0" value="${m.currentHP}" />
           </label>
         </div>
 
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+        <div class="dlg-row">
+          <label style="display:block;margin-bottom:6px;">Conditions</label>
+          <select id="edConds" multiple size="6" style="width:100%;">${
+            conditionsList.map(c => `<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('')
+          }</select>
+        </div>
+
+        <div class="dlg-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <img src="${m.image || defaultImage}" alt="Preview" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #2a2a31;"
+               onerror="this.onerror=null; this.src='${defaultImage}'">
+          <input id="edImg" type="file" accept="image/*" style="display:none" />
+          <button id="edChoose" type="button" class="ghost">Choose New Image</button>
+          <button id="edRemove" type="button" class="ghost">Remove Image</button>
+        </div>
+
+        <div class="dlg-actions">
+          <button id="edDelete" type="button" class="danger">Delete</button>
+          <span style="flex:1"></span>
           <button id="edCancel" type="button" class="ghost">Cancel</button>
           <button id="edSave" type="submit">Save</button>
         </div>
@@ -173,31 +182,56 @@
     `;
     document.body.appendChild(dlg);
 
+    const edImg = dlg.querySelector('#edImg');
+    dlg.querySelector('#edChoose').onclick = () => edImg.click();
+    dlg.querySelector('#edRemove').onclick = () => {
+      m.image = defaultImage;
+      dlg.querySelector('img').src = defaultImage;
+    };
+    dlg.querySelector('#edDelete').onclick = () => {
+      if(confirm(`Are you sure you want to delete ${m.name}?`)){
+        monsters = monsters.filter(x=>x.id!==id);
+        save(); render(); dlg.close();
+      }
+    };
     dlg.querySelector('#edCancel').onclick = () => dlg.close();
 
+    // Save all edits
     dlg.querySelector('#edSave').onclick = (e) => {
       e.preventDefault();
       const newName = dlg.querySelector('#edName').value.trim();
       const newAC   = Number(dlg.querySelector('#edAC').value);
       const newMax  = Math.max(1, Number(dlg.querySelector('#edMax').value));
       let   newCur  = Math.max(0, Number(dlg.querySelector('#edCur').value));
+      const newConds = [...dlg.querySelector('#edConds').options].filter(o=>o.selected).map(o=>o.value);
 
+      // Apply basic fields
       if(newName) m.name = newName;
       if(!Number.isNaN(newAC)) m.ac = newAC;
       if(!Number.isNaN(newMax)) m.maxHP = newMax;
       if(!Number.isNaN(newCur)) m.currentHP = newCur;
 
-      // Clamp current HP within [0, maxHP]
+      // Clamp current HP to [0, maxHP]
       if(m.currentHP > m.maxHP) m.currentHP = m.maxHP;
       if(m.currentHP < 0) m.currentHP = 0;
 
-      save(); render(); dlg.close();
+      m.conditions = newConds;
+
+      const file = edImg.files && edImg.files[0];
+      if(file){
+        const reader = new FileReader();
+        reader.onload  = () => { m.image = reader.result || defaultImage; save(); render(); dlg.close(); };
+        reader.onerror = () => { m.image = defaultImage; save(); render(); dlg.close(); };
+        try { reader.readAsDataURL(file); }
+        catch { m.image = defaultImage; save(); render(); dlg.close(); }
+      } else {
+        save(); render(); dlg.close();
+      }
     };
 
     dlg.addEventListener('close', ()=> dlg.remove());
     dlg.showModal();
   }
-  /* -------------------------------------------------------------------------- */
 
   function escapeHtml(s){return String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
 
@@ -211,10 +245,8 @@
     ).join('');
     const condDisplay = m.conditions.length ? `<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>` : "";
 
-    // We render an <a> wrapper for structure, but rely on an explicit click handler (below)
-    // to call window.open() so it works reliably on iPad/iOS for data URLs & blobs.
     const thumb = `
-      <a class="thumb-wrap ${down ? 'thumb-x' : ''}" href="${m.image || defaultImage}" data-img="${m.image || defaultImage}" target="_blank" rel="noopener">
+      <a class="thumb-wrap ${down ? 'thumb-x' : ''}" href="${m.image || defaultImage}" target="_blank" rel="noopener">
         <img class="thumb" src="${m.image || defaultImage}" alt="Monster image"
              onerror="this.onerror=null; this.src='${defaultImage}'"/>
       </a>`;
@@ -246,19 +278,8 @@
 
     list.querySelectorAll('.row').forEach(row=>{
       const id = row.dataset.id;
-      const m  = monsters.find(x=>x.id===id);
       const dmgInput = row.querySelector('.dmg');
       const healInput = row.querySelector('.heal');
-
-      // Thumbnail click -> window.open (reliable for user-supplied images/data URLs on mobile)
-      const thumb = row.querySelector('.thumb-wrap');
-      if (thumb){
-        const imgUrl = m?.image || defaultImage;
-        thumb.addEventListener('click', (e)=>{
-          e.preventDefault();
-          try { window.open(imgUrl, '_blank', 'noopener'); } catch {}
-        });
-      }
 
       // Buttons (click + touchstart for iPad reliability)
       const dmgBtn = row.querySelector('.do-dmg');
@@ -266,54 +287,20 @@
       ['click','touchstart'].forEach(evt=>{
         dmgBtn.addEventListener(evt, e=>{
           e.preventDefault();
-          const v = Number(dmgInput.value||0);
-          if(v>0){
-            pendingFocus = { id, field: 'dmg' };
-            damage(id,v);
-            dmgInput.value = '';
-          } else {
-            dmgInput.focus();
-          }
+          const v = Number(dmgInput.value||0); if(v>0) damage(id,v);
         }, {passive:false});
         healBtn.addEventListener(evt, e=>{
           e.preventDefault();
-          const v = Number(healInput.value||0);
-          if(v>0){
-            pendingFocus = { id, field: 'heal' };
-            heal(id,v);
-            healInput.value = '';
-          } else {
-            healInput.focus();
-          }
+          const v = Number(healInput.value||0); if(v>0) heal(id,v);
         }, {passive:false});
       });
 
-      // Enter-to-apply + keep focus
+      // Enter-to-apply
       dmgInput.addEventListener('keypress',e=>{
-        if(e.key==='Enter'){
-          e.preventDefault();
-          const v=Number(dmgInput.value||0);
-          if(v>0){
-            pendingFocus = { id, field: 'dmg' };
-            damage(id,v);
-            dmgInput.value='';
-          }else{
-            dmgInput.focus();
-          }
-        }
+        if(e.key==='Enter'){ e.preventDefault(); const v=Number(dmgInput.value||0); if(v>0) damage(id,v); }
       });
       healInput.addEventListener('keypress',e=>{
-        if(e.key==='Enter'){
-          e.preventDefault();
-          const v=Number(healInput.value||0);
-          if(v>0){
-            pendingFocus = { id, field: 'heal' };
-            heal(id,v);
-            healInput.value='';
-          }else{
-            healInput.focus();
-          }
-        }
+        if(e.key==='Enter'){ e.preventDefault(); const v=Number(healInput.value||0); if(v>0) heal(id,v); }
       });
 
       // Conditions
@@ -324,7 +311,7 @@
       };
       row.querySelector('.clear-cond').onclick = (e)=>{ e.preventDefault(); updateConditions(id,[]); };
 
-      // Edit / Delete
+      // Edit / Delete buttons
       row.querySelectorAll('.mini-btn').forEach(btn=>{
         btn.addEventListener('click', e=>{
           e.preventDefault();
@@ -334,26 +321,16 @@
         });
       });
     });
-
-    // After re-render, restore focus if requested
-    if (pendingFocus) {
-      const { id: focusId, field } = pendingFocus;
-      const rowEl = document.querySelector(`.row[data-id="${focusId}"]`);
-      if (rowEl) {
-        const inputEl = rowEl.querySelector(field === 'dmg' ? '.dmg' : '.heal');
-        if (inputEl) setTimeout(() => { inputEl.focus(); }, 0);
-      }
-      pendingFocus = null;
-    }
   }
 
-  // ADD form
+  // Add monster form
   $('#addForm').addEventListener('submit', e=>{
     e.preventDefault();
     addMonster($('#name').value, $('#hp').value, $('#ac').value, tempImage || defaultImage);
     e.target.reset();
     tempImage = null;
-    const b = $('#imgBtn'); b.textContent = "Choose Image"; b.classList.remove('selected');
+    $('#imgBtn').textContent = "Choose Image";
+    $('#imgBtn').classList.remove('selected');
     $('#name').focus();
   });
 
@@ -364,24 +341,18 @@
     }
   });
 
-  // Choose Image button (hidden file input)
-  const imgBtn = $('#imgBtn');
-  const imgFile = $('#imgFile');
-  imgBtn.addEventListener('click', ()=> imgFile.click());
-  imgFile.addEventListener('change', e=>{
-    const file = e.target.files && e.target.files[0];
+  // Image choose for ADD
+  $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());
+  $('#imgFile').addEventListener('change',e=>{
+    const file=e.target.files[0];
     if(file){
-      const reader = new FileReader();
-      reader.onload = ev => {
-        tempImage = ev.target.result;  // data URL; opening works via window.open on click
-        imgBtn.textContent = "Image Selected";
-        imgBtn.classList.add('selected');
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        tempImage=ev.target.result;
+        $('#imgBtn').textContent="Image Selected";
+        $('#imgBtn').classList.add("selected");
       };
       reader.readAsDataURL(file);
-    } else {
-      tempImage = null;
-      imgBtn.textContent = "Choose Image";
-      imgBtn.classList.remove('selected');
     }
   });
 
