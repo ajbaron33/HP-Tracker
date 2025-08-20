@@ -46,7 +46,7 @@
 <body>
 <div class="card">
   <form id="addForm">
-    <input id="name" placeholder="Monster Name" required />
+    <input id="name" placeholder="Monster name" required />
     <input id="hp" type="number" placeholder="Max HP" min="1" required />
     <input id="ac" type="number" placeholder="AC" />
     <input id="imgFile" type="file" accept="image/*" style="display:none" />
@@ -72,7 +72,14 @@
   let monsters = load();
   let tempImage = null;
   let pendingFocus = null; // { id: string, field: 'dmg' }
-  let imageJustPicked = false; // iPad fix: remember we just chose a file
+  let imageJustPicked = false; // iPad quirk flag
+
+  // --- small helper to submit the form robustly on iPad ---
+  function submitForm() {
+    const form = $('#addForm');
+    if (form.requestSubmit) form.requestSubmit();
+    else form.dispatchEvent(new Event('submit', {cancelable:true, bubbles:true}));
+  }
 
   const conditionsList = [
     "Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled",
@@ -114,13 +121,13 @@
   }
 
   function nextDuplicateName(baseName){
-    const root = baseName.replace(/\s\d+$/, ''); // strip trailing number if present
+    const root = baseName.replace(/\s\d+$/, '');
     const nums = monsters
       .map(m => m.name)
       .filter(n => n === root || n.startsWith(root + ' '))
       .map(n => {
         const m = n.match(/\s(\d+)$/);
-        return m ? parseInt(m[1],10) : 1; // plain root counts as 1
+        return m ? parseInt(m[1],10) : 1;
       });
     const maxNum = nums.length ? Math.max(...nums) : 1;
     const next = Math.max(2, maxNum + 1);
@@ -129,11 +136,7 @@
 
   function duplicateMonster(id){
     const m = monsters.find(x=>x.id===id); if(!m) return;
-    const dup = {
-      ...m,
-      id: genId(),
-      name: nextDuplicateName(m.name),
-    };
+    const dup = { ...m, id: genId(), name: nextDuplicateName(m.name) };
     monsters.push(dup);
     save(); render();
   }
@@ -401,18 +404,19 @@
     addMonster($('#name').value, $('#hp').value, $('#ac').value, tempImage || defaultImage);
     e.target.reset();
     tempImage = null;
-    imageJustPicked = false; // reset iPad flag after successful add
+    imageJustPicked = false; // reset after successful add
     $('#imgBtn').textContent = "Choose Image";
     $('#imgBtn').classList.remove('selected');
     $('#name').focus();
   });
 
-  // iPad fix: ensure tapping "Add" submits the form (Chrome/Safari)
+  // iPad: ensure tapping "Add" always submits
   const addBtn = document.querySelector('#addForm button[type="submit"]');
-  ['touchstart','touchend'].forEach(evt=>{
+  ['touchstart','touchend','click','keydown'].forEach(evt=>{
     addBtn.addEventListener(evt, (e)=>{
+      if (evt === 'keydown' && e.key !== 'Enter') return;
       e.preventDefault();
-      $('#addForm').requestSubmit();
+      submitForm();
     }, { passive:false });
   });
 
@@ -429,7 +433,7 @@
   $('#imgBtn').addEventListener('keydown',(e)=>{
     if(e.key === 'Enter'){
       e.preventDefault();
-      $('#addForm').requestSubmit();
+      submitForm();
     }
   });
   $('#imgFile').addEventListener('change',e=>{
@@ -438,16 +442,16 @@
       const reader=new FileReader();
       reader.onload=ev=>{
         tempImage=ev.target.result;
-        imageJustPicked = true;                 // iPad: flag that we just picked a file
+        imageJustPicked = true;
         $('#imgBtn').textContent="Image Selected";
         $('#imgBtn').classList.add("selected");
-        $('#imgBtn').blur();                    // move focus off the button
-        $('#name').focus();                     // pressing Enter will now create the monster
+        $('#imgBtn').blur();
+        $('#name').focus(); // return focuses here, but Enter will submit due to handlers below
       };
       reader.readAsDataURL(file);
     } else {
       tempImage = null;
-      imageJustPicked = false;                  // reset flag
+      imageJustPicked = false;
       $('#imgBtn').textContent="Choose Image";
       $('#imgBtn').classList.remove("selected");
       $('#imgBtn').blur();
@@ -456,11 +460,13 @@
   });
 
   // If we just picked an image, pressing Enter anywhere should add the monster
-  document.addEventListener('keydown',(e)=>{
-    if(e.key === 'Enter' && imageJustPicked){
-      e.preventDefault();
-      $('#addForm').requestSubmit();
-    }
+  ['keydown','keypress','keyup'].forEach(evt=>{
+    document.addEventListener(evt,(e)=>{
+      if ((evt==='keydown' || evt==='keypress' || evt==='keyup') && e.key === 'Enter' && imageJustPicked){
+        e.preventDefault();
+        submitForm();
+      }
+    }, { passive:false });
   });
 
   render();
