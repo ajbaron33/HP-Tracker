@@ -7,51 +7,21 @@
 <style>
   body{background:#0b0b0c;color:#e8eaed;font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:20px;}
   .card{background:#131316;border:1px solid #2a2a31;border-radius:14px;padding:12px;}
-
-  input,button,select{padding:8px;margin:4px;border-radius:8px;border:1px solid #2a2a31;background:#1f1f24;color:#e8eaed;}
-  /* Remove spinner arrows on number inputs */
-  input[type=number]::-webkit-outer-spin-button,
-  input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
-  input[type=number]{ -moz-appearance: textfield; }
-
-  /* Layout */
-  #list{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px;margin-top:12px;}
-  @media (max-width: 600px){ #list{grid-template-columns:1fr;} }
-
-  /* Monster rows */
-  .row{margin:8px 0;padding:8px;border-radius:10px;display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;position:relative;}
+  input,button,select{padding:8px;margin:4px;border-radius:8px;border:1px solid #2a2a31;background:#1f1f24;color:#e8eaed;cursor:pointer;}
+  button.image-btn.selected{background:#0066cc;color:white;}
+  .row{margin:8px 0;padding:8px;border-radius:10px;}
   .row.alive{background:#0e1a12;}
   .row.down{background:#1f0f12;}
   .row.bloodied{background:#3a3100;}
   .bloodied{color:#ff6b6b;font-weight:600;}
   .conditions{margin-top:6px;font-size:0.9em;color:#d4d4d4;}
-  .name-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-
-  /* Thumbnail */
-  .thumb-wrap{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid #2a2a31;background:#0f1113;display:flex;align-items:center;justify-content:center;}
-  .thumb{width:100%;height:100%;object-fit:cover;display:block;}
-  .thumb-placeholder{font-size:11px;color:#9aa0a6;text-align:center;padding:4px;}
-  .thumb-x::after{content:"✖";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:42px;color:rgba(255,0,0,0.85);pointer-events:none;}
-
-  /* Small per-card edit button */
-  .edit-btn{
-    position:absolute;top:6px;right:6px;font-size:11px;padding:2px 6px;border-radius:999px;
-    background:#2a2a31;color:#e8eaed;border:1px solid #3b3b44;cursor:pointer;
-  }
-  .edit-btn:hover{background:#3b3b44;}
-
-  /* Image chooser button (add form) */
-  #img{display:none;}
-  #imgBtn{cursor:pointer;}
-  #imgBtn.selected{background:#0b5bd3;} /* blue when chosen */
-
-  /* Dialog */
-  dialog{border:1px solid #2a2a31;background:#131316;color:#e8eaed;border-radius:12px;padding:16px;max-width:420px;width:calc(100% - 24px);}
-  dialog::backdrop{background:rgba(0,0,0,0.55);}
-  .dlg-row{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap;}
-  .dlg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;}
-  .danger{background:#7a1f25;border-color:#a43a42;}
-  .ghost{background:#1b1b20;border-color:#2a2a31;}
+  #list{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px;margin-top:12px;}
+  @media (max-width: 600px){ #list{grid-template-columns:1fr;} }
+  .thumb{width:50px;height:50px;object-fit:cover;border-radius:6px;cursor:pointer;}
+  .thumb.dead{position:relative;}
+  .thumb.dead::after{content:"✖";position:absolute;top:0;left:0;width:50px;height:50px;
+    background:rgba(255,0,0,0.5);color:white;font-size:32px;text-align:center;line-height:50px;border-radius:6px;}
+  .edit-btn{font-size:0.8em;background:#444;margin-top:4px;}
 </style>
 </head>
 <body>
@@ -60,104 +30,70 @@
     <input id="name" placeholder="Monster name" required />
     <input id="hp" type="number" placeholder="Max HP" min="1" required />
     <input id="ac" type="number" placeholder="AC" />
-    <input id="img" type="file" accept="image/*" />
-    <button type="button" id="imgBtn">Choose Image</button>
+    <input id="imgFile" type="file" accept="image/*" style="display:none" />
+    <button id="imgBtn" type="button" class="image-btn">Choose Image</button>
     <button type="submit">Add</button>
     <button id="clearAll" type="button">Clear All Monsters</button>
   </form>
 </div>
-
 <div id="list"></div>
-
 <script>
 (()=>{
   const $=s=>document.querySelector(s);
-  const storeKey='monster_hp_v7';
-  const STOCK_IMG='stock.png'; // put your stock image next to index.html
-
-  const genId=()=> (window.crypto && typeof crypto.randomUUID==="function")
-    ? crypto.randomUUID()
-    : ("id_"+Date.now().toString(36)+Math.random().toString(36).slice(2));
-
+  const storeKey='monster_hp_v4';
+  const defaultImage="https://ajbaron33.github.io/HP-Tracker/default-monster.png"; // stock image in repo
   let monsters=load();
+  let tempImage=null;
 
-  const conditionsList=[
-    "Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled",
-    "Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone",
-    "Restrained","Stunned","Unconscious"
-  ];
+  const conditionsList=["Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
 
-  function save(){ localStorage.setItem(storeKey, JSON.stringify(monsters)); }
-  function load(){
-    try{
-      const raw=localStorage.getItem(storeKey)
-        || localStorage.getItem('monster_hp_v6')
-        || localStorage.getItem('monster_hp_v5')
-        || localStorage.getItem('monster_hp_v4')
-        || localStorage.getItem('monster_hp_v3');
-      const arr=raw?JSON.parse(raw):[];
-      return Array.isArray(arr)?arr.map(m=>({
-        id: m.id||genId(),
-        name: String(m.name||""),
-        maxHP: Number(m.maxHP||m.maxHp||1),
-        currentHP: Number(m.currentHP||m.hp||m.maxHP||1),
-        ac: Number(m.ac||0),
-        conditions: Array.isArray(m.conditions)? m.conditions : [],
-        img: m.img || STOCK_IMG
-      })):[];
-    }catch{return [];}
-  }
+  function save(){localStorage.setItem(storeKey,JSON.stringify(monsters));}
+  function load(){try{const raw=localStorage.getItem(storeKey);return raw?JSON.parse(raw):[];}catch{return[];}}
 
-  function addMonster(name,maxHP,ac=0,img=null){
-    name=(name||"").trim(); const hp=Number(maxHP);
-    if(!name || !(hp>0)) return;
-    monsters.push({
-      id: genId(), name, maxHP: hp, currentHP: hp,
-      ac: Number(ac)||0, conditions: [], img: img || STOCK_IMG
-    });
+  function addMonster(name,maxHP,ac=0,img=defaultImage){
+    name=name.trim(); maxHP=Number(maxHP);
+    if(!name||!maxHP) return;
+    monsters.push({id:crypto.randomUUID(),name,maxHP,currentHP:maxHP,ac:Number(ac)||0,conditions:[],image:img});
     save(); render();
   }
-  function damage(id,amt){
-    const m=monsters.find(x=>x.id===id); if(!m) return;
-    const n=Math.max(1,Number(amt||0));
-    m.currentHP=Math.max(0,m.currentHP-n); save(); render();
-  }
-  function heal(id,amt){
-    const m=monsters.find(x=>x.id===id); if(!m) return;
-    const n=Math.max(1,Number(amt||0));
-    m.currentHP=Math.min(m.maxHP,m.currentHP+n); save(); render();
-  }
-  function updateConditions(id,selected){
-    const i=monsters.findIndex(x=>x.id===id); if(i<0) return;
-    monsters[i].conditions=selected; save(); render();
+  function damage(id,amt){const m=monsters.find(m=>m.id===id);if(!m)return;m.currentHP=Math.max(0,m.currentHP-amt);save();render();}
+  function heal(id,amt){const m=monsters.find(m=>m.id===id);if(!m)return;m.currentHP=Math.min(m.maxHP,m.currentHP+amt);save();render();}
+  function updateConditions(id,selected){const m=monsters.find(m=>m.id===id);if(!m)return;m.conditions=selected;save();render();}
+  function deleteMonster(id){monsters=monsters.filter(m=>m.id!==id);save();render();}
+  function editMonster(id){
+    const m=monsters.find(m=>m.id===id); if(!m) return;
+    const newName=prompt("Edit name:",m.name);
+    const newHP=prompt("Edit Max HP:",m.maxHP);
+    const newAC=prompt("Edit AC:",m.ac);
+    if(newName) m.name=newName.trim();
+    if(newHP) {m.maxHP=Number(newHP); if(m.currentHP>m.maxHP) m.currentHP=m.maxHP;}
+    if(newAC) m.ac=Number(newAC);
+    save(); render();
   }
 
   function rowTemplate(m){
-    const bloodied = m.currentHP<=m.maxHP/2 && m.currentHP>0;
-    const down = m.currentHP<=0;
-    const cls = down ? "row down" : bloodied ? "row bloodied" : "row alive";
-    const skull = down ? "💀 " : "";
+    const bloodied=m.currentHP<=m.maxHP/2&&m.currentHP>0;
+    const down=m.currentHP<=0;
+    const cls=down?"row down":bloodied?"row bloodied":"row alive";
+    const skull=down?"💀 ":"";
     const condOptions=conditionsList.map(c=>`<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('');
     const condDisplay=m.conditions.length?`<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>`:"";
-    const thumb = `<a class="thumb-wrap ${down?"thumb-x":""}" href="${m.img||STOCK_IMG}" target="_blank" rel="noopener">
-                     <img class="thumb" src="${m.img||STOCK_IMG}" alt="Monster image"/>
-                   </a>`;
-
     return `<div class="${cls}" data-id="${m.id}">
-      ${thumb}
       <div>
-        <div class="name-line"><strong>${skull}${m.name}</strong> <span>(AC ${m.ac})</span></div>
-        ${bloodied&&!down?`<div class="bloodied">⚠️ Bloodied</div>`:''}
-        <div>HP: ${m.currentHP}/${m.maxHP}</div>
-        <input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button>
-        <input class="heal" type="number" placeholder="Heal"/> <button class="do-heal">Heal</button>
-        <div>
-          <select class="condSelect" multiple size="4">${condOptions}</select>
-          <button class="clear-cond" type="button">Clear Conditions</button>
-        </div>
-        ${condDisplay}
+        <img src="${m.image||defaultImage}" class="thumb ${down?"dead":""}" onclick="window.open('${m.image||defaultImage}','_blank')" />
+        <strong>${skull}${m.name}</strong> (AC ${m.ac})
+        <button class="edit-btn" data-action="edit">Edit</button>
+        <button class="edit-btn" data-action="delete">Delete</button>
       </div>
-      <button class="edit-btn" title="Edit or Delete">Edit / Delete</button>
+      ${bloodied&&!down?`<div class="bloodied">⚠️ Bloodied</div>`:''}
+      <div>HP: ${m.currentHP}/${m.maxHP}</div>
+      <input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button>
+      <input class="heal" type="number" placeholder="Heal"/> <button class="do-heal">Heal</button>
+      <div>
+        <select class="condSelect" multiple size="4">${condOptions}</select>
+        <button class="clear-cond" type="button">Clear Conditions</button>
+      </div>
+      ${condDisplay}
     </div>`;
   }
 
@@ -166,140 +102,68 @@
     list.innerHTML=monsters.map(rowTemplate).join('');
     list.querySelectorAll('.row').forEach(row=>{
       const id=row.dataset.id;
-      const m=monsters.find(x=>x.id===id);
       const dmgInput=row.querySelector('.dmg');
       const healInput=row.querySelector('.heal');
-
-      row.querySelector('.do-dmg').onclick=(e)=>{e.preventDefault();const v=Number(dmgInput.value||0);if(v>0)damage(id,v);};
-      row.querySelector('.do-heal').onclick=(e)=>{e.preventDefault();const v=Number(healInput.value||0);if(v>0)heal(id,v);};
+      const dmgBtn=row.querySelector('.do-dmg');
+      const healBtn=row.querySelector('.do-heal');
+      [dmgBtn,healBtn].forEach(btn=>{
+        ["click","touchstart"].forEach(evt=>{
+          btn.addEventListener(evt,(e)=>{
+            e.preventDefault();
+            if(btn.classList.contains('do-dmg')){
+              const v=Number(dmgInput.value||0); if(v>0) damage(id,v);
+            } else {
+              const v=Number(healInput.value||0); if(v>0) heal(id,v);
+            }
+          });
+        });
+      });
       dmgInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(dmgInput.value||0);if(v>0)damage(id,v);}});
       healInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(healInput.value||0);if(v>0)heal(id,v);}});
-
       const condSel=row.querySelector('.condSelect');
       condSel.onchange=()=>{
         const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
         updateConditions(id,selected);
       };
-      row.querySelector('.clear-cond').onclick=(e)=>{e.preventDefault(); updateConditions(id, []);};
-
-      // Edit/Delete
-      row.querySelector('.edit-btn').onclick=()=>openEditDialog(m);
+      row.querySelector('.clear-cond').onclick=(e)=>{e.preventDefault();updateConditions(id,[]);};
+      row.querySelectorAll('.edit-btn').forEach(btn=>{
+        btn.onclick=(e)=>{
+          e.preventDefault();
+          if(btn.dataset.action==="edit") editMonster(id);
+          if(btn.dataset.action==="delete") deleteMonster(id);
+        };
+      });
     });
   }
 
-  /* ---- Edit dialog ---- */
-  function openEditDialog(m){
-    const dlg=document.createElement('dialog');
-    dlg.innerHTML=`
-      <form method="dialog">
-        <h3 style="margin:0 0 8px 0;">Edit Monster</h3>
-        <div class="dlg-row"><label style="flex:1">Name
-          <input id="edName" value="${escapeHtml(m.name)}" />
-        </label></div>
-        <div class="dlg-row">
-          <label>Max HP <input id="edMax" type="number" min="1" value="${m.maxHP}"/></label>
-          <label>AC <input id="edAC" type="number" min="0" value="${m.ac}"/></label>
-        </div>
-        <div class="dlg-row" style="align-items:center;">
-          <input id="edImg" type="file" accept="image/*" />
-          <button id="edChoose" type="button" class="ghost">Choose New Image</button>
-          <button id="edRemove" type="button" class="ghost">Remove Image</button>
-        </div>
-        <div class="dlg-actions">
-          <button id="edDelete" type="button" class="danger">Delete</button>
-          <span style="flex:1"></span>
-          <button id="edCancel" type="button" class="ghost">Cancel</button>
-          <button id="edSave" type="submit">Save</button>
-        </div>
-      </form>
-    `;
-    document.body.appendChild(dlg);
-    const edImg=dlg.querySelector('#edImg');
-    dlg.querySelector('#edChoose').onclick=()=>edImg.click();
-
-    dlg.querySelector('#edRemove').onclick=()=>{
-      m.img=STOCK_IMG; save(); render();
-    };
-
-    dlg.querySelector('#edDelete').onclick=()=>{
-      if(confirm(`Delete ${m.name}?`)){
-        monsters = monsters.filter(x=>x.id!==m.id);
-        save(); render(); dlg.close();
-      }
-    };
-    dlg.querySelector('#edCancel').onclick=()=>dlg.close();
-
-    dlg.addEventListener('close', ()=> dlg.remove());
-
-    dlg.querySelector('#edSave').onclick=(e)=>{
-      e.preventDefault();
-      const newName = dlg.querySelector('#edName').value.trim();
-      const newMax  = Number(dlg.querySelector('#edMax').value)||m.maxHP;
-      const newAC   = Number(dlg.querySelector('#edAC').value)||0;
-
-      m.name = newName || m.name;
-      m.maxHP = Math.max(1,newMax);
-      m.ac = newAC;
-      if(m.currentHP>m.maxHP) m.currentHP=m.maxHP;
-
-      const file = edImg.files && edImg.files[0];
-      if(file){
-        const reader=new FileReader();
-        reader.onload = ()=>{ m.img=reader.result; save(); render(); dlg.close(); };
-        reader.onerror= ()=>{ save(); render(); dlg.close(); };
-        try{ reader.readAsDataURL(file); }
-        catch{ save(); render(); dlg.close(); }
-      }else{
-        save(); render(); dlg.close();
-      }
-    };
-
-    dlg.showModal();
-  }
-
-  function escapeHtml(s){return String(s).replace(/[&<>\"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
-
-  /* ---- Add form & image choose button ---- */
-  const imgInput=$('#img');
-  const imgBtn=$('#imgBtn');
-  imgBtn.addEventListener('click',()=>imgInput.click());
-  imgInput.addEventListener('change',()=>{
-    if(imgInput.files && imgInput.files.length){
-      imgBtn.textContent='Image Selected'; imgBtn.classList.add('selected');
-    }else{
-      imgBtn.textContent='Choose Image'; imgBtn.classList.remove('selected');
-    }
-  });
-
   $('#addForm').addEventListener('submit',e=>{
     e.preventDefault();
-    const name=$('#name').value;
-    const hp=$('#hp').value;
-    const ac=$('#ac').value;
-    const file=(imgInput && imgInput.files && imgInput.files.length)?imgInput.files[0]:null;
-
-    const afterAdd=()=>{
-      e.target.reset();
-      imgBtn.textContent='Choose Image';
-      imgBtn.classList.remove('selected');
-      $('#name').focus();
-    };
-
-    if(file){
-      const reader=new FileReader();
-      reader.onload = ()=>{ addMonster(name,hp,ac,reader.result); afterAdd(); };
-      reader.onerror= ()=>{ addMonster(name,hp,ac,STOCK_IMG);    afterAdd(); };
-      try { reader.readAsDataURL(file); }
-      catch { addMonster(name,hp,ac,STOCK_IMG); afterAdd(); }
-    }else{
-      addMonster(name,hp,ac,STOCK_IMG);
-      afterAdd();
-    }
+    addMonster($('#name').value,$('#hp').value,$('#ac').value,tempImage||defaultImage);
+    e.target.reset();
+    tempImage=null;
+    $('#imgBtn').textContent="Choose Image";
+    $('#imgBtn').classList.remove("selected");
+    $('#name').focus();
   });
 
   $('#clearAll').addEventListener('click',()=>{
     if(confirm('Are you sure you want to clear all monsters?')){
       monsters=[]; save(); render();
+    }
+  });
+
+  // image button handling
+  $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());
+  $('#imgFile').addEventListener('change',e=>{
+    const file=e.target.files[0];
+    if(file){
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        tempImage=ev.target.result;
+        $('#imgBtn').textContent="Image Selected";
+        $('#imgBtn').classList.add("selected");
+      };
+      reader.readAsDataURL(file);
     }
   });
 
