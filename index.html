@@ -41,9 +41,24 @@
   .dlg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
   .danger{background:#7a1f25;border-color:#a43a42;}
   .ghost{background:#1b1b20;border-color:#2a2a31;}
+
+  /* Banner image styling */
+  .banner{
+    display:block;
+    width:100%;
+    height:auto;
+    max-height:220px;
+    object-fit:cover;
+    margin-bottom:12px;
+    border-radius:12px;
+  }
 </style>
 </head>
 <body>
+
+<!-- Banner image -->
+<img src="IMG_9858.jpg" alt="Banner" class="banner">
+
 <div class="card">
   <form id="addForm">
     <input id="name" placeholder="Monster name" required />
