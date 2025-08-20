@@ -30,6 +30,8 @@
   .thumb-x::after{content:"✖";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:42px;color:rgba(255,0,0,0.85);pointer-events:none;}
 
   .mini-btn{font-size:0.8em;background:#444;border-color:#555;margin-left:6px;}
+  /* Make Duplicate look like the other mini buttons */
+  .mini-clone{font-size:0.8em;background:#444;border-color:#555;margin-left:6px;}
 
   /* Dialog */
   dialog{border:1px solid #2a2a31;background:#131316;color:#e8eaed;border-radius:12px;padding:16px;max-width:520px;width:calc(100% - 24px);}
@@ -69,6 +71,7 @@
 
   let monsters = load();
   let tempImage = null;
+  let pendingFocus = null; // { id: string, field: 'dmg' }
 
   const conditionsList = [
     "Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled",
@@ -108,6 +111,32 @@
     });
     save(); render();
   }
+
+  function nextDuplicateName(baseName){
+    const root = baseName.replace(/\s\d+$/, ''); // strip trailing number if present
+    const nums = monsters
+      .map(m => m.name)
+      .filter(n => n === root || n.startsWith(root + ' '))
+      .map(n => {
+        const m = n.match(/\s(\d+)$/);
+        return m ? parseInt(m[1],10) : 1; // plain root counts as 1
+      });
+    const maxNum = nums.length ? Math.max(...nums) : 1;
+    const next = Math.max(2, maxNum + 1);
+    return `${root} ${next}`;
+  }
+
+  function duplicateMonster(id){
+    const m = monsters.find(x=>x.id===id); if(!m) return;
+    const dup = {
+      ...m,
+      id: genId(),
+      name: nextDuplicateName(m.name),
+    };
+    monsters.push(dup);
+    save(); render();
+  }
+
   function damage(id,amt){
     const m = monsters.find(x=>x.id===id); if(!m) return;
     const n = Math.max(1, Number(amt||0));
@@ -196,7 +225,6 @@
     };
     dlg.querySelector('#edCancel').onclick = () => dlg.close();
 
-    // Save all edits
     dlg.querySelector('#edSave').onclick = (e) => {
       e.preventDefault();
       const newName = dlg.querySelector('#edName').value.trim();
@@ -205,13 +233,11 @@
       let   newCur  = Math.max(0, Number(dlg.querySelector('#edCur').value));
       const newConds = [...dlg.querySelector('#edConds').options].filter(o=>o.selected).map(o=>o.value);
 
-      // Apply basic fields
       if(newName) m.name = newName;
       if(!Number.isNaN(newAC)) m.ac = newAC;
       if(!Number.isNaN(newMax)) m.maxHP = newMax;
       if(!Number.isNaN(newCur)) m.currentHP = newCur;
 
-      // Clamp current HP to [0, maxHP]
       if(m.currentHP > m.maxHP) m.currentHP = m.maxHP;
       if(m.currentHP < 0) m.currentHP = 0;
 
@@ -258,6 +284,7 @@
           <strong>${skull}${m.name}</strong> <span>(AC ${m.ac})</span>
           <button class="mini-btn" data-action="edit">Edit</button>
           <button class="mini-btn" data-action="delete">Delete</button>
+          <button class="mini-clone" data-action="duplicate" title="Duplicate">Duplicate</button>
         </div>
         ${bloodied && !down ? `<div class="bloodied">⚠️ Bloodied</div>` : ``}
         <div>HP: ${m.currentHP}/${m.maxHP}</div>
@@ -287,20 +314,52 @@
       ['click','touchstart'].forEach(evt=>{
         dmgBtn.addEventListener(evt, e=>{
           e.preventDefault();
-          const v = Number(dmgInput.value||0); if(v>0) damage(id,v);
+          const v = Number(dmgInput.value||0);
+          if(v>0){
+            pendingFocus = { id, field: 'dmg' };
+            damage(id,v);
+            dmgInput.value = '';
+          } else {
+            dmgInput.focus();
+          }
         }, {passive:false});
         healBtn.addEventListener(evt, e=>{
           e.preventDefault();
-          const v = Number(healInput.value||0); if(v>0) heal(id,v);
+          const v = Number(healInput.value||0);
+          if(v>0){
+            heal(id,v);
+            healInput.value = '';
+          } else {
+            healInput.focus();
+          }
         }, {passive:false});
       });
 
-      // Enter-to-apply
+      // Enter-to-apply — keep focus in Damage box
       dmgInput.addEventListener('keypress',e=>{
-        if(e.key==='Enter'){ e.preventDefault(); const v=Number(dmgInput.value||0); if(v>0) damage(id,v); }
+        if(e.key==='Enter'){
+          e.preventDefault();
+          const v=Number(dmgInput.value||0);
+          if(v>0){
+            pendingFocus = { id, field: 'dmg' };
+            damage(id,v);
+            dmgInput.value='';
+          } else {
+            dmgInput.focus();
+          }
+        }
       });
       healInput.addEventListener('keypress',e=>{
-        if(e.key==='Enter'){ e.preventDefault(); const v=Number(healInput.value||0); if(v>0) heal(id,v); }
+        if(e.key==='Enter'){
+          e.preventDefault();
+          const v=Number(healInput.value||0);
+          if(v>0){
+            heal(id,v);
+            healInput.value='';
+          } else {
+            healInput.focus();
+          }
+        }
       });
 
       // Conditions
@@ -311,16 +370,28 @@
       };
       row.querySelector('.clear-cond').onclick = (e)=>{ e.preventDefault(); updateConditions(id,[]); };
 
-      // Edit / Delete buttons
-      row.querySelectorAll('.mini-btn').forEach(btn=>{
+      // Edit / Delete / Duplicate
+      row.querySelectorAll('button[data-action]').forEach(btn=>{
         btn.addEventListener('click', e=>{
           e.preventDefault();
           const act = btn.dataset.action;
-          if(act === 'edit')   openEditDialog(id);
-          if(act === 'delete') deleteMonster(id);
+          if(act === 'edit')      openEditDialog(id);
+          if(act === 'delete')    deleteMonster(id);
+          if(act === 'duplicate') duplicateMonster(id);
         });
       });
     });
+
+    // After re-render, restore focus for the damage input if requested
+    if (pendingFocus) {
+      const { id: focusId, field } = pendingFocus;
+      const rowEl = document.querySelector(`.row[data-id="${focusId}"]`);
+      if (rowEl) {
+        const inputEl = rowEl.querySelector(field === 'dmg' ? '.dmg' : '.heal');
+        if (inputEl) setTimeout(() => { inputEl.focus(); }, 0);
+      }
+      pendingFocus = null;
+    }
   }
 
   // Add monster form
@@ -334,12 +405,6 @@
     $('#name').focus();
   });
 
-  // iPad fix: ensure tapping "Add" submits the form
-  const addBtn = document.querySelector('#addForm button[type="submit"]');
-  addBtn.addEventListener('touchstart', (e) => {
-    e.preventDefault(); $('#addForm').requestSubmit();
-  }, { passive: false });
-
   // Clear all
   $('#clearAll').addEventListener('click',()=>{
     if(confirm('Are you sure you want to clear all monsters?')){
@@ -349,6 +414,13 @@
 
   // Image choose for ADD
   $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());
+  // If Enter is pressed while image button has focus, submit the form (don’t reopen picker)
+  $('#imgBtn').addEventListener('keydown',(e)=>{
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      $('#addForm').requestSubmit();
+    }
+  });
   $('#imgFile').addEventListener('change',e=>{
     const file=e.target.files[0];
     if(file){
@@ -357,8 +429,16 @@
         tempImage=ev.target.result;
         $('#imgBtn').textContent="Image Selected";
         $('#imgBtn').classList.add("selected");
+        $('#imgBtn').blur();      // move focus off the button
+        $('#name').focus();       // pressing Enter will now create the monster
       };
       reader.readAsDataURL(file);
+    } else {
+      tempImage = null;
+      $('#imgBtn').textContent="Choose Image";
+      $('#imgBtn').classList.remove("selected");
+      $('#imgBtn').blur();
+      $('#name').focus();
     }
   });
 
