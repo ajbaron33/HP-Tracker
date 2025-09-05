@@ -40,20 +40,15 @@
   .danger{background:#7a1f25;border-color:#a43a42;}
   .ghost{background:#1b1b20;border-color:#2a2a31;}
 
-  .banner{
-    display:block;width:100%;height:auto;max-height:220px;object-fit:contain;background:#131316;margin-bottom:12px;border-radius:12px;
-  }
-
+  .banner{display:block;width:100%;height:auto;max-height:220px;object-fit:contain;background:#131316;margin-bottom:12px;border-radius:12px;}
   .bloodied-btn{margin-top:6px}
 </style>
 </head>
 <body>
 
-<!-- Banner image -->
 <img src="IMG_9858.jpeg" alt="Banner" class="banner">
 
 <div class="card">
-  <!-- keep name required, allow HP blank; turn off native validation -->
   <form id="addForm" novalidate>
     <input id="name" placeholder="Monster Name" required />
     <input id="hp" type="number" placeholder="Max HP (leave blank if unknown)" min="1" />
@@ -72,487 +67,82 @@
   const $ = s => document.querySelector(s);
   const storeKey = 'monster_hp_v9';
   const defaultImage = new URL('default-monster.png', location.href).href;
-
-  const genId = () =>
-    (window.crypto && typeof crypto.randomUUID === "function")
-      ? crypto.randomUUID()
-      : ("id_" + Date.now().toString(36) + Math.random().toString(36).slice(2));
+  const genId = () => (crypto.randomUUID ? crypto.randomUUID() : ("id_" + Date.now().toString(36) + Math.random().toString(36).slice(2)));
 
   let monsters = load();
   let tempImage = null;
-  let pendingFocus = null; // { id, field: 'dmg' }
+  let pendingFocus = null;
   let imageJustPicked = false;
 
-  function submitForm() {
-    const form = $('#addForm');
-    if (form.requestSubmit) form.requestSubmit();
-    else form.dispatchEvent(new Event('submit', {cancelable:true, bubbles:true}));
+  function submitForm(){ const form=$('#addForm'); if(form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit',{cancelable:true,bubbles:true})); }
+  async function compressImageToDataURL(file,maxSide=700,quality=0.82){ return new Promise((resolve,reject)=>{const fr=new FileReader();fr.onerror=()=>reject(new Error('read'));fr.onload=()=>{const img=new Image();img.onload=()=>{const canvas=document.createElement('canvas');let {width,height}=img;const scale=Math.min(1,maxSide/Math.max(width,height));width=Math.max(1,Math.round(width*scale));height=Math.max(1,Math.round(height*scale));canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(img,0,0,width,height);try{resolve(canvas.toDataURL('image/jpeg',quality));}catch{resolve(fr.result);} };img.onerror=()=>reject(new Error('img'));img.src=fr.result;};fr.readAsDataURL(file);}); }
+
+  const conditionsList=["Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
+  function save(){ try{localStorage.setItem(storeKey,JSON.stringify(monsters));}catch{alert('Storage is full');} }
+  function load(){ try{const raw=localStorage.getItem(storeKey);const arr=raw?JSON.parse(raw):[];if(!Array.isArray(arr))return[];return arr.map(m=>{const hasKnown=m.maxHP!=null&&m.currentHP!=null&&m.maxHP!==''&&m.currentHP!=='';const maxHP=hasKnown?Number(m.maxHP):null;const currentHP=hasKnown?Number(m.currentHP):null;const hpUnknown=!hasKnown||m.hpUnknown===true;const damageTaken=Number.isFinite(+m.damageTaken)?Math.max(0,+m.damageTaken):(hasKnown?Math.max(0,maxHP-currentHP):0);return{id:m.id||genId(),name:(m.name||'').trim(),maxHP:hpUnknown?null:maxHP,currentHP:hpUnknown?null:Math.max(0,Math.min(currentHP,maxHP)),damageTaken,hpUnknown,ac:Number(m.ac||0),conditions:Array.isArray(m.conditions)?m.conditions:[],image:m.image||defaultImage};});}catch{return[];} }
+
+  function addMonster(name,maxHP,ac=0,img=defaultImage){ name=(name||'').trim();const hp=Number(maxHP);if(!name)return;if(Number.isFinite(hp)&&hp>0){monsters.push({id:genId(),name,maxHP:hp,currentHP:hp,damageTaken:0,hpUnknown:false,ac:Number(ac)||0,conditions:[],image:img||defaultImage});}else{monsters.push({id:genId(),name,maxHP:null,currentHP:null,damageTaken:0,hpUnknown:true,ac:Number(ac)||0,conditions:[],image:img||defaultImage});}save();render(); }
+
+  function nextDuplicateName(base){const root=base.replace(/\s\d+$/,'');const nums=monsters.map(m=>m.name).filter(n=>n===root||n.startsWith(root+' ')).map(n=>{const m=n.match(/\s(\d+)$/);return m?parseInt(m[1],10):1;});const max=nums.length?Math.max(...nums):1;return`${root} ${Math.max(2,max+1)}`;}
+  function duplicateMonster(id){const m=monsters.find(x=>x.id===id);if(!m)return;const dup={...m,id:genId(),name:nextDuplicateName(m.name)};monsters.push(dup);save();render();}
+  function damage(id,amt){const m=monsters.find(x=>x.id===id);if(!m)return;const n=Math.max(1,Number(amt||0));if(m.hpUnknown){m.damageTaken=(m.damageTaken||0)+n;}else{m.currentHP=Math.max(0,m.currentHP-n);m.damageTaken=Math.max(0,(m.maxHP??0)-(m.currentHP??0));}save();render();}
+  function heal(id,amt){const m=monsters.find(x=>x.id===id);if(!m)return;const n=Math.max(1,Number(amt||0));if(m.hpUnknown){m.damageTaken=Math.max(0,(m.damageTaken||0)-n);}else{m.currentHP=Math.min(m.maxHP,m.currentHP+n);m.damageTaken=Math.max(0,(m.maxHP??0)-(m.currentHP??0));}save();render();}
+  function updateConditions(id,sel){const i=monsters.findIndex(x=>x.id===id);if(i<0)return;monsters[i].conditions=sel;save();render();}
+  function deleteMonster(id){const m=monsters.find(x=>x.id===id);if(!m)return;if(confirm(`Delete ${m.name}?`)){monsters=monsters.filter(x=>x.id!==id);save();render();}}
+
+  function escapeHtml(s){return String(s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+  function roundToNearest10(n){return Math.round(n/10)*10;}
+
+  // --- Bloodied estimator (fixed to keep exact damage) ---
+  function setFromBloodied(id){
+    const m=monsters.find(x=>x.id===id); if(!m) return;
+    const exactDamage=Math.max(0,m.damageTaken||0);
+    if(exactDamage<=0)return;
+    const estimatedMax=roundToNearest10(exactDamage*2);
+    m.maxHP=Math.max(1,estimatedMax);
+    m.currentHP=Math.max(0,m.maxHP-exactDamage); // exact damage
+    m.hpUnknown=false;
+    m.damageTaken=exactDamage;                   // keep exact
+    save();render();
   }
 
-  // compress images for iOS storage
-  async function compressImageToDataURL(file, maxSide=700, quality=0.82){
-    return new Promise((resolve, reject)=>{
-      const fr = new FileReader();
-      fr.onerror = ()=>reject(new Error('read'));
-      fr.onload = ()=>{
-        const img = new Image();
-        img.onload = ()=>{
-          const canvas = document.createElement('canvas');
-          let {width, height} = img;
-          const scale = Math.min(1, maxSide / Math.max(width, height));
-          width = Math.max(1, Math.round(width * scale));
-          height = Math.max(1, Math.round(height * scale));
-          canvas.width = width; canvas.height = height;
-          const ctx = canvas.getContext('2d', {alpha:false});
-          try{ ctx.drawImage(img,0,0,width,height); resolve(canvas.toDataURL('image/jpeg', quality)); }
-          catch{ resolve(fr.result); }
-        };
-        img.onerror = ()=>reject(new Error('img'));
-        img.src = fr.result;
-      };
-      fr.readAsDataURL(file);
-    });
-  }
-
-  const conditionsList = [
-    "Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled",
-    "Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone",
-    "Restrained","Stunned","Unconscious"
-  ];
-
-  function save(){
-    try{ localStorage.setItem(storeKey, JSON.stringify(monsters)); }
-    catch{ alert('Storage is full for images. Try a smaller image.'); }
-  }
-
-  // ---- Load: migrate prior data, support unknown HP + damageTaken ----
-  function load(){
-    try{
-      const raw = localStorage.getItem(storeKey);
-      const arr = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(arr)) return [];
-      return arr.map(m=>{
-        const hasKnown = m.maxHP != null && m.currentHP != null && m.maxHP !== '' && m.currentHP !== '';
-        const maxHP = hasKnown ? Number(m.maxHP) : null;
-        const currentHP = hasKnown ? Number(m.currentHP) : null;
-        const hpUnknown = !hasKnown || m.hpUnknown === true;
-        const damageTaken = Number.isFinite(+m.damageTaken)
-          ? Math.max(0, +m.damageTaken)
-          : (hasKnown ? Math.max(0, maxHP - currentHP) : 0);
-        return {
-          id: m.id || genId(),
-          name: (m.name || '').trim(),
-          maxHP: hpUnknown ? null : maxHP,
-          currentHP: hpUnknown ? null : Math.max(0, Math.min(currentHP, maxHP)),
-          damageTaken,
-          hpUnknown,
-          ac: Number(m.ac || 0),
-          conditions: Array.isArray(m.conditions) ? m.conditions : [],
-          image: m.image || defaultImage
-        };
-      });
-    }catch{ return []; }
-  }
-
-  // ---- Add: allow blank HP ----
-  function addMonster(name,maxHP,ac=0,img=defaultImage){
-    name = (name || '').trim();
-    const hp = Number(maxHP);
-    if(!name) return;
-
-    if (Number.isFinite(hp) && hp > 0) {
-      monsters.push({
-        id: genId(),
-        name,
-        maxHP: hp,
-        currentHP: hp,
-        damageTaken: 0,
-        hpUnknown: false,
-        ac: Number(ac) || 0,
-        conditions: [],
-        image: img || defaultImage
-      });
-    } else {
-      monsters.push({
-        id: genId(),
-        name,
-        maxHP: null,
-        currentHP: null,
-        damageTaken: 0,
-        hpUnknown: true,
-        ac: Number(ac) || 0,
-        conditions: [],
-        image: img || defaultImage
-      });
-    }
-    save(); render();
-  }
-
-  function nextDuplicateName(baseName){
-    const root = baseName.replace(/\s\d+$/, '');
-    const nums = monsters
-      .map(m => m.name)
-      .filter(n => n === root || n.startsWith(root + ' '))
-      .map(n => { const m = n.match(/\s(\d+)$/); return m ? parseInt(m[1],10) : 1; });
-    const maxNum = nums.length ? Math.max(...nums) : 1;
-    const next = Math.max(2, maxNum + 1);
-    return `${root} ${next}`;
-  }
-
-  function duplicateMonster(id){
-    const m = monsters.find(x=>x.id===id); if(!m) return;
-    const dup = { ...m, id: genId(), name: nextDuplicateName(m.name), image: m.image || defaultImage };
-    monsters.push(dup);
-    save(); render();
-  }
-
-  // ---- Damage / Heal: tally when unknown, adjust HP when known ----
-  function damage(id,amt){
-    const m = monsters.find(x=>x.id===id); if(!m) return;
-    const n = Math.max(1, Number(amt||0));
-    if (m.hpUnknown) {
-      m.damageTaken = (m.damageTaken || 0) + n;
-    } else {
-      m.currentHP = Math.max(0, m.currentHP - n);
-      m.damageTaken = Math.max(0, (m.maxHP ?? 0) - (m.currentHP ?? 0));
-    }
-    save(); render();
-  }
-  function heal(id,amt){
-    const m = monsters.find(x=>x.id===id); if(!m) return;
-    const n = Math.max(1, Number(amt||0));
-    if (m.hpUnknown) {
-      m.damageTaken = Math.max(0, (m.damageTaken || 0) - n);
-    } else {
-      m.currentHP = Math.min(m.maxHP, m.currentHP + n);
-      m.damageTaken = Math.max(0, (m.maxHP ?? 0) - (m.currentHP ?? 0));
-    }
-    save(); render();
-  }
-
-  function updateConditions(id,selected){
-    const i = monsters.findIndex(x=>x.id===id); if(i<0) return;
-    monsters[i].conditions = selected;
-    save(); render();
-  }
-  function deleteMonster(id){
-    const m = monsters.find(x=>x.id===id); if(!m) return;
-    if(confirm(`Are you sure you want to delete ${m.name}?`)){
-      monsters = monsters.filter(x=>x.id!==id);
-      save(); render();
-    }
-  }
-
-  // ---- Edit dialog: allow clearing HP to go back to unknown ----
-  function openEditDialog(id){
-    const m = monsters.find(x=>x.id===id); if(!m) return;
-
-    const dlg = document.createElement('dialog');
-    dlg.innerHTML = `
-      <form method="dialog">
-        <h3 style="margin:0 0 10px 0;">Edit ${escapeHtml(m.name)}</h3>
-
-        <div class="dlg-grid">
-          <label class="dlg-row">Name
-            <input id="edName" value="${escapeHtml(m.name)}" />
-          </label>
-          <label class="dlg-row">AC
-            <input id="edAC" type="number" min="0" value="${m.ac}" />
-          </label>
-
-          <label class="dlg-row">Max HP
-            <input id="edMax" type="number" min="1" value="${m.hpUnknown ? '' : (m.maxHP ?? '')}" placeholder="${m.hpUnknown ? 'Unknown — enter to set' : ''}" />
-          </label>
-          <label class="dlg-row">Current HP
-            <input id="edCur" type="number" min="0" value="${m.hpUnknown ? '' : (m.currentHP ?? '')}" placeholder="${m.hpUnknown ? '—' : ''}" />
-          </label>
-        </div>
-
-        <div class="dlg-row">
-          <label style="display:block;margin-bottom:6px;">Conditions</label>
-          <select id="edConds" multiple size="6" style="width:100%;">${
-            conditionsList.map(c => `<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('')
-          }</select>
-        </div>
-
-        <div class="dlg-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <img src="${m.image || defaultImage}" alt="Preview" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #2a2a31;"
-               onerror="this.onerror=null; this.src='${defaultImage}'">
-          <input id="edImg" type="file" accept="image/*" style="display:none" />
-          <button id="edChoose" type="button" class="ghost">Choose New Image</button>
-          <button id="edRemove" type="button" class="ghost">Remove Image</button>
-        </div>
-
-        <div class="dlg-actions">
-          <button id="edDelete" type="button" class="danger">Delete</button>
-          <span style="flex:1"></span>
-          <button id="edCancel" type="button" class="ghost">Cancel</button>
-          <button id="edSave" type="submit">Save</button>
-        </div>
-      </form>
-    `;
-    document.body.appendChild(dlg);
-
-    const edImg = dlg.querySelector('#edImg');
-    dlg.querySelector('#edChoose').onclick = () => edImg.click();
-    dlg.querySelector('#edRemove').onclick = () => {
-      m.image = defaultImage;
-      dlg.querySelector('img').src = defaultImage;
-    };
-    dlg.querySelector('#edDelete').onclick = () => {
-      if(confirm(`Are you sure you want to delete ${m.name}?`)){
-        monsters = monsters.filter(x=>x.id!==id);
-        save(); render(); dlg.close();
-      }
-    };
-    dlg.querySelector('#edCancel').onclick = () => dlg.close();
-
-    dlg.querySelector('#edSave').onclick = async (e) => {
-      e.preventDefault();
-      const newName = dlg.querySelector('#edName').value.trim();
-      const newAC   = Number(dlg.querySelector('#edAC').value);
-      const edMaxEl = dlg.querySelector('#edMax');
-      const edCurEl = dlg.querySelector('#edCur');
-
-      const newMax  = edMaxEl.value === '' ? null : Math.max(1, Number(edMaxEl.value));
-      const newCur  = edCurEl.value === '' ? null : Math.max(0, Number(edCurEl.value));
-      const newConds = [...dlg.querySelector('#edConds').options].filter(o=>o.selected).map(o=>o.value);
-
-      if(newName) m.name = newName;
-      if(!Number.isNaN(newAC)) m.ac = newAC;
-
-      if (newMax == null) {
-        m.maxHP = null; m.currentHP = null; m.hpUnknown = true;
-      } else {
-        m.maxHP = newMax; m.hpUnknown = false;
-        const cur = newCur == null ? Math.max(0, newMax - (m.damageTaken || 0)) : Math.min(newMax, newCur);
-        m.currentHP = cur;
-        m.damageTaken = Math.max(0, newMax - cur);
-      }
-
-      m.conditions = newConds;
-
-      const file = edImg.files && edImg.files[0];
-      if(file){
-        try{
-          const dataURL = await compressImageToDataURL(file);
-          m.image = dataURL || defaultImage;
-        }catch{ m.image = defaultImage; }
-      }
-      save(); render(); dlg.close();
-    };
-
-    dlg.addEventListener('close', ()=> dlg.remove());
-    dlg.showModal();
-  }
-
-  function escapeHtml(s){return String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
-  function roundToNearest10(n){ return Math.round(n/10)*10; }
-
-  // ---- UI template: show unknown HP line + bloodied estimator ----
   function rowTemplate(m){
-    const isKnown = !m.hpUnknown && m.maxHP != null && m.currentHP != null;
-    const bloodied = isKnown && m.currentHP <= m.maxHP/2 && m.currentHP > 0;
-    const down = isKnown && m.currentHP <= 0;
-    const cls = down ? "row down" : bloodied ? "row bloodied" : "row alive";
-    const skull = down ? "💀 " : "";
-    const condOptions = conditionsList.map(c =>
-      `<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`
-    ).join('');
-    const condDisplay = m.conditions.length ? `<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>` : "";
-
-    const thumb = `
-      <a class="thumb-wrap ${down ? 'thumb-x' : ''}" href="${m.image || defaultImage}" target="_blank" rel="noopener">
-        <img class="thumb" src="${m.image || defaultImage}" alt="Monster image"
-             onerror="this.onerror=null; this.src='${defaultImage}'"/>
-      </a>`;
-
-    const hpLine = isKnown
-      ? `<div>HP: ${m.currentHP}/${m.maxHP}</div>`
-      : `<div>HP: ? <span style="opacity:.8">· Damage so far:</span> ${m.damageTaken || 0}</div>`;
-
-    const bloodiedBtn = (!isKnown && (m.damageTaken || 0) > 0)
-      ? `<button type="button" class="bloodied-btn" data-action="bloodied" title="Set total HP from bloodied (2× damage → rounded to nearest 10)">Set HP from Bloodied</button>`
-      : ``;
-
-    return `<div class="${cls}" data-id="${m.id}">
-      ${thumb}
-      <div>
-        <div class="name-line">
-          <strong>${skull}${m.name}</strong> <span>(AC ${m.ac})</span>
-          <button type="button" class="mini-btn" data-action="edit">Edit</button>
-          <button type="button" class="mini-btn" data-action="delete">Delete</button>
-          <button type="button" class="mini-clone" data-action="duplicate" title="Duplicate">Duplicate</button>
-        </div>
-        ${bloodied && !down ? `<div class="bloodied">⚠️ Bloodied</div>` : ``}
-        ${hpLine}
-        <input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button>
-        <input class="heal" type="number" placeholder="Heal"/>   <button class="do-heal">Heal</button>
-        ${bloodiedBtn}
-        <div>
-          <select class="condSelect" multiple size="4">${condOptions}</select>
-          <button class="clear-cond" type="button">Clear Conditions</button>
-        </div>
-        ${condDisplay}
-      </div>
-    </div>`;
+    const isKnown=!m.hpUnknown&&m.maxHP!=null&&m.currentHP!=null;
+    const bloodied=isKnown&&m.currentHP<=m.maxHP/2&&m.currentHP>0;
+    const down=isKnown&&m.currentHP<=0;
+    const cls=down?"row down":bloodied?"row bloodied":"row alive";
+    const skull=down?"💀 ":"";
+    const condOptions=conditionsList.map(c=>`<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('');
+    const condDisplay=m.conditions.length?`<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>`:"";
+    const thumb=`<a class="thumb-wrap ${down?'thumb-x':''}" href="${m.image||defaultImage}" target="_blank"><img class="thumb" src="${m.image||defaultImage}" onerror="this.onerror=null;this.src='${defaultImage}'"/></a>`;
+    const hpLine=isKnown?`<div>HP: ${m.currentHP}/${m.maxHP}</div>`:`<div>HP: ? <span style="opacity:.8">· Damage so far:</span> ${m.damageTaken||0}</div>`;
+    const bloodiedBtn=(!isKnown&&(m.damageTaken||0)>0)?`<button type="button" class="bloodied-btn" data-action="bloodied">Set HP from Bloodied</button>`:"";
+    return `<div class="${cls}" data-id="${m.id}">${thumb}<div><div class="name-line"><strong>${skull}${m.name}</strong> <span>(AC ${m.ac})</span><button type="button" class="mini-btn" data-action="edit">Edit</button><button type="button" class="mini-btn" data-action="delete">Delete</button><button type="button" class="mini-clone" data-action="duplicate">Duplicate</button></div>${bloodied&&!down?`<div class="bloodied">⚠️ Bloodied</div>`:""}${hpLine}<input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button><input class="heal" type="number" placeholder="Heal"/> <button class="do-heal">Heal</button>${bloodiedBtn}<div><select class="condSelect" multiple size="4">${condOptions}</select><button class="clear-cond" type="button">Clear Conditions</button></div>${condDisplay}</div></div>`;
   }
 
   function render(){
-    const list = $('#list');
-    list.innerHTML = monsters.map(rowTemplate).join('');
-
+    const list=$('#list'); list.innerHTML=monsters.map(rowTemplate).join('');
     list.querySelectorAll('.row').forEach(row=>{
-      const id = row.dataset.id;
-      const dmgInput = row.querySelector('.dmg');
-      const healInput = row.querySelector('.heal');
-
-      const dmgBtn = row.querySelector('.do-dmg');
-      const healBtn = row.querySelector('.do-heal');
+      const id=row.dataset.id; const dmgInput=row.querySelector('.dmg'); const healInput=row.querySelector('.heal');
+      const dmgBtn=row.querySelector('.do-dmg'); const healBtn=row.querySelector('.do-heal');
       ['click','touchstart'].forEach(evt=>{
-        dmgBtn.addEventListener(evt, e=>{
-          e.preventDefault();
-          const v = Number(dmgInput.value||0);
-          if(v>0){
-            pendingFocus = { id, field: 'dmg' };
-            damage(id,v);
-            dmgInput.value = '';
-          } else dmgInput.focus();
-        }, {passive:false});
-        healBtn.addEventListener(evt, e=>{
-          e.preventDefault();
-          const v = Number(healInput.value||0);
-          if(v>0){
-            heal(id,v);
-            healInput.value = '';
-          } else healInput.focus();
-        }, {passive:false});
+        dmgBtn.addEventListener(evt,e=>{e.preventDefault();const v=Number(dmgInput.value||0);if(v>0){pendingFocus={id,field:'dmg'};damage(id,v);dmgInput.value='';}else dmgInput.focus();},{passive:false});
+        healBtn.addEventListener(evt,e=>{e.preventDefault();const v=Number(healInput.value||0);if(v>0){heal(id,v);healInput.value='';}else healInput.focus();},{passive:false});
       });
-
-      dmgInput.addEventListener('keypress',e=>{
-        if(e.key==='Enter'){
-          e.preventDefault();
-          const v=Number(dmgInput.value||0);
-          if(v>0){
-            pendingFocus = { id, field: 'dmg' };
-            damage(id,v);
-            dmgInput.value='';
-          } else dmgInput.focus();
-        }
-      });
-      healInput.addEventListener('keypress',e=>{
-        if(e.key==='Enter'){
-          e.preventDefault();
-          const v=Number(healInput.value||0);
-          if(v>0){
-            heal(id,v);
-            healInput.value='';
-          } else healInput.focus();
-        }
-      });
-
-      // Edit / Delete / Duplicate / Bloodied
-      row.querySelectorAll('button[data-action]').forEach(btn=>{
-        ['click','touchstart'].forEach(evt=>{
-          btn.addEventListener(evt, e=>{
-            e.preventDefault();
-            const act = btn.dataset.action;
-            if(act === 'edit')      openEditDialog(id);
-            if(act === 'delete')    deleteMonster(id);
-            if(act === 'duplicate') duplicateMonster(id);
-            if(act === 'bloodied')  setFromBloodied(id);
-          }, {passive:false});
-        });
-      });
-
-      const condSel = row.querySelector('.condSelect');
-      condSel.onchange = () => {
-        const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
-        updateConditions(id,selected);
-      };
-      row.querySelector('.clear-cond').onclick = (e)=>{ e.preventDefault(); updateConditions(id,[]); };
+      dmgInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(dmgInput.value||0);if(v>0){pendingFocus={id,field:'dmg'};damage(id,v);dmgInput.value='';}}});
+      healInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(healInput.value||0);if(v>0){heal(id,v);healInput.value='';}}});
+      row.querySelectorAll('button[data-action]').forEach(btn=>{['click','touchstart'].forEach(evt=>{btn.addEventListener(evt,e=>{e.preventDefault();const act=btn.dataset.action;if(act==='delete')deleteMonster(id);if(act==='duplicate')duplicateMonster(id);if(act==='bloodied')setFromBloodied(id);},{passive:false});});});
+      const condSel=row.querySelector('.condSelect');condSel.onchange=()=>{const sel=[...condSel.options].filter(o=>o.selected).map(o=>o.value);updateConditions(id,sel);};row.querySelector('.clear-cond').onclick=e=>{e.preventDefault();updateConditions(id,[]);};
     });
-
-    // restore focus to damage after action
-    if (pendingFocus) {
-      const { id: focusId, field } = pendingFocus;
-      const rowEl = document.querySelector(`.row[data-id="${focusId}"]`);
-      if (rowEl) {
-        const inputEl = rowEl.querySelector(field === 'dmg' ? '.dmg' : '.heal');
-        if (inputEl) setTimeout(() => { inputEl.focus(); }, 0);
-      }
-      pendingFocus = null;
-    }
+    if(pendingFocus){const {id,field}=pendingFocus;const rowEl=document.querySelector(`.row[data-id="${id}"]`);if(rowEl){const inputEl=rowEl.querySelector(field==='dmg'?'.dmg':'.heal');if(inputEl)setTimeout(()=>{inputEl.focus();},0);}pendingFocus=null;}
   }
 
-  // ---- Bloodied estimator ----
-  function setFromBloodied(id){
-  const m = monsters.find(x=>x.id===id); if(!m) return;
-  const exactDamage = Math.max(0, m.damageTaken || 0);
-  if (exactDamage <= 0) return;
-
-  const estimatedMax = roundToNearest10(exactDamage * 2); // <-- only this is rounded
-  m.maxHP = Math.max(1, estimatedMax);
-  m.currentHP = Math.max(0, m.maxHP - exactDamage);       // keep damage exact
-  m.hpUnknown = false;
-
-  // IMPORTANT: do NOT recompute damageTaken from max/current (keeps it exact)
-  // m.damageTaken stays as `exactDamage`
-
-  save(); 
-  render();
-}
-
-  // ---- Add monster form ----
-  $('#addForm').addEventListener('submit', e=>{
-    e.preventDefault();
-    addMonster($('#name').value, $('#hp').value, $('#ac').value, tempImage || defaultImage);
-    e.target.reset();
-    tempImage = null;
-    imageJustPicked = false;
-    $('#imgBtn').textContent = "Choose Image";
-    $('#imgBtn').classList.remove('selected');
-    $('#name').focus();
-  });
-
-  const addBtn = document.querySelector('#addForm button[type="submit"]');
-  addBtn.addEventListener('click', () => { submitForm(); });
-  addBtn.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') { e.preventDefault(); submitForm(); } });
-
-  $('#clearAll').addEventListener('click',()=>{
-    if(confirm('Are you sure you want to clear all monsters?')){
-      monsters=[]; save(); render();
-    }
-  });
-
-  $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());
-  $('#imgBtn').addEventListener('keydown',(e)=>{
-    if(e.key === 'Enter'){ e.preventDefault(); submitForm(); }
-  });
-  $('#imgFile').addEventListener('change',async e=>{
-    const file=e.target.files[0];
-    if(file){
-      try{ tempImage = await compressImageToDataURL(file); }
-      catch{ tempImage = null; }
-      imageJustPicked = true;
-      $('#imgBtn').textContent="Image Selected";
-      $('#imgBtn').classList.add("selected");
-      $('#imgBtn').blur();
-      $('#name').focus();
-    } else {
-      tempImage = null; imageJustPicked = false;
-      $('#imgBtn').textContent="Choose Image"; $('#imgBtn').classList.remove("selected"); $('#imgBtn').blur(); $('#name').focus();
-    }
-  });
-
-  ['keydown','keypress','keyup'].forEach(evt=>{
-    document.addEventListener(evt,(e)=>{
-      if ((evt==='keydown' || evt==='keypress' || evt==='keyup') && e.key === 'Enter' && imageJustPicked){
-        e.preventDefault(); submitForm();
-      }
-    }, { passive:false });
-  });
-
+  $('#addForm').addEventListener('submit',e=>{e.preventDefault();addMonster($('#name').value,$('#hp').value,$('#ac').value,tempImage||defaultImage);e.target.reset();tempImage=null;imageJustPicked=false;$('#imgBtn').textContent="Choose Image";$('#imgBtn').classList.remove('selected');$('#name').focus();});
+  const addBtn=document.querySelector('#addForm button[type="submit"]');addBtn.addEventListener('click',()=>{submitForm();});addBtn.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitForm();}});
+  $('#clearAll').addEventListener('click',()=>{if(confirm('Clear all monsters?')){monsters=[];save();render();}});
+  $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());$('#imgBtn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitForm();}});
+  $('#imgFile').addEventListener('change',async e=>{const file=e.target.files[0];if(file){try{tempImage=await compressImageToDataURL(file);}catch{tempImage=null;}imageJustPicked=true;$('#imgBtn').textContent="Image Selected";$('#imgBtn').classList.add("selected");$('#imgBtn').blur();$('#name').focus();}else{tempImage=null;imageJustPicked=false;$('#imgBtn').textContent="Choose Image";$('#imgBtn').classList.remove("selected");$('#imgBtn').blur();$('#name').focus();}});
+  ['keydown','keypress','keyup'].forEach(evt=>{document.addEventListener(evt,e=>{if((evt==='keydown'||evt==='keypress'||evt==='keyup')&&e.key==='Enter'&&imageJustPicked){e.preventDefault();submitForm();}}, {passive:false});});
   render();
 })();
 </script>
