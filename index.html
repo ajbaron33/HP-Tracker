@@ -487,16 +487,21 @@
 
   // ---- Bloodied estimator ----
   function setFromBloodied(id){
-    const m = monsters.find(x=>x.id===id); if(!m) return;
-    const dmg = Math.max(0, m.damageTaken || 0);
-    if (dmg <= 0) return;
-    const est = roundToNearest10(dmg * 2);
-    m.maxHP = Math.max(1, est);
-    m.currentHP = Math.max(0, m.maxHP - dmg);
-    m.hpUnknown = false;
-    m.damageTaken = Math.max(0, m.maxHP - m.currentHP);
-    save(); render();
-  }
+  const m = monsters.find(x=>x.id===id); if(!m) return;
+  const exactDamage = Math.max(0, m.damageTaken || 0);
+  if (exactDamage <= 0) return;
+
+  const estimatedMax = roundToNearest10(exactDamage * 2); // <-- only this is rounded
+  m.maxHP = Math.max(1, estimatedMax);
+  m.currentHP = Math.max(0, m.maxHP - exactDamage);       // keep damage exact
+  m.hpUnknown = false;
+
+  // IMPORTANT: do NOT recompute damageTaken from max/current (keeps it exact)
+  // m.damageTaken stays as `exactDamage`
+
+  save(); 
+  render();
+}
 
   // ---- Add monster form ----
   $('#addForm').addEventListener('submit', e=>{
