@@ -78,32 +78,89 @@
   async function compressImageToDataURL(file,maxSide=700,quality=0.82){ return new Promise((resolve,reject)=>{const fr=new FileReader();fr.onerror=()=>reject(new Error('read'));fr.onload=()=>{const img=new Image();img.onload=()=>{const canvas=document.createElement('canvas');let {width,height}=img;const scale=Math.min(1,maxSide/Math.max(width,height));width=Math.max(1,Math.round(width*scale));height=Math.max(1,Math.round(height*scale));canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(img,0,0,width,height);try{resolve(canvas.toDataURL('image/jpeg',quality));}catch{resolve(fr.result);} };img.onerror=()=>reject(new Error('img'));img.src=fr.result;};fr.readAsDataURL(file);}); }
 
   const conditionsList=["Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
-  function save(){ try{localStorage.setItem(storeKey,JSON.stringify(monsters));}catch{alert('Storage is full');} }
-  function load(){ try{const raw=localStorage.getItem(storeKey);const arr=raw?JSON.parse(raw):[];if(!Array.isArray(arr))return[];return arr.map(m=>{const hasKnown=m.maxHP!=null&&m.currentHP!=null&&m.maxHP!==''&&m.currentHP!=='';const maxHP=hasKnown?Number(m.maxHP):null;const currentHP=hasKnown?Number(m.currentHP):null;const hpUnknown=!hasKnown||m.hpUnknown===true;const damageTaken=Number.isFinite(+m.damageTaken)?Math.max(0,+m.damageTaken):(hasKnown?Math.max(0,maxHP-currentHP):0);return{id:m.id||genId(),name:(m.name||'').trim(),maxHP:hpUnknown?null:maxHP,currentHP:hpUnknown?null:Math.max(0,Math.min(currentHP,maxHP)),damageTaken,hpUnknown,ac:Number(m.ac||0),conditions:Array.isArray(m.conditions)?m.conditions:[],image:m.image||defaultImage};});}catch{return[];} }
 
-  function addMonster(name,maxHP,ac=0,img=defaultImage){ name=(name||'').trim();const hp=Number(maxHP);if(!name)return;if(Number.isFinite(hp)&&hp>0){monsters.push({id:genId(),name,maxHP:hp,currentHP:hp,damageTaken:0,hpUnknown:false,ac:Number(ac)||0,conditions:[],image:img||defaultImage});}else{monsters.push({id:genId(),name,maxHP:null,currentHP:null,damageTaken:0,hpUnknown:true,ac:Number(ac)||0,conditions:[],image:img||defaultImage});}save();render(); }
+  function save(){ try{localStorage.setItem(storeKey,JSON.stringify(monsters));}catch{alert('Storage is full');} }
+
+  function load(){
+    try{
+      const raw=localStorage.getItem(storeKey);
+      const arr=raw?JSON.parse(raw):[];
+      if(!Array.isArray(arr))return[];
+      return arr.map(m=>{
+        const hasKnown=m.maxHP!=null&&m.currentHP!=null&&m.maxHP!==''&&m.currentHP!==''; 
+        const maxHP=hasKnown?Number(m.maxHP):null;
+        const currentHP=hasKnown?Number(m.currentHP):null;
+        const hpUnknown=!hasKnown||m.hpUnknown===true;
+        const damageTaken=Number.isFinite(+m.damageTaken)
+          ? Math.max(0,+m.damageTaken)
+          : (hasKnown?Math.max(0,maxHP-currentHP):0);
+        return {
+          id:m.id||genId(),
+          name:(m.name||'').trim(),
+          maxHP:hpUnknown?null:maxHP,
+          currentHP:hpUnknown?null:Math.max(0,Math.min(currentHP,maxHP)),
+          damageTaken,
+          hpUnknown,
+          ac:Number(m.ac||0),
+          conditions:Array.isArray(m.conditions)?m.conditions:[],
+          image:m.image||defaultImage
+        };
+      });
+    }catch{return[];}
+  }
+
+  function addMonster(name,maxHP,ac=0,img=defaultImage){
+    name=(name||'').trim();
+    const hp=Number(maxHP);
+    if(!name)return;
+
+    if(Number.isFinite(hp)&&hp>0){
+      monsters.push({id:genId(),name,maxHP:hp,currentHP:hp,damageTaken:0,hpUnknown:false,ac:Number(ac)||0,conditions:[],image:img||defaultImage});
+    }else{
+      monsters.push({id:genId(),name,maxHP:null,currentHP:null,damageTaken:0,hpUnknown:true,ac:Number(ac)||0,conditions:[],image:img||defaultImage});
+    }
+    save(); render();
+  }
 
   function nextDuplicateName(base){const root=base.replace(/\s\d+$/,'');const nums=monsters.map(m=>m.name).filter(n=>n===root||n.startsWith(root+' ')).map(n=>{const m=n.match(/\s(\d+)$/);return m?parseInt(m[1],10):1;});const max=nums.length?Math.max(...nums):1;return`${root} ${Math.max(2,max+1)}`;}
   function duplicateMonster(id){const m=monsters.find(x=>x.id===id);if(!m)return;const dup={...m,id:genId(),name:nextDuplicateName(m.name)};monsters.push(dup);save();render();}
-  function damage(id,amt){const m=monsters.find(x=>x.id===id);if(!m)return;const n=Math.max(1,Number(amt||0));if(m.hpUnknown){m.damageTaken=(m.damageTaken||0)+n;}else{m.currentHP=Math.max(0,m.currentHP-n);m.damageTaken=Math.max(0,(m.maxHP??0)-(m.currentHP??0));}save();render();}
-  function heal(id,amt){const m=monsters.find(x=>x.id===id);if(!m)return;const n=Math.max(1,Number(amt||0));if(m.hpUnknown){m.damageTaken=Math.max(0,(m.damageTaken||0)-n);}else{m.currentHP=Math.min(m.maxHP,m.currentHP+n);m.damageTaken=Math.max(0,(m.maxHP??0)-(m.currentHP??0));}save();render();}
+
+  function damage(id,amt){
+    const m=monsters.find(x=>x.id===id); if(!m) return;
+    const n=Math.max(1,Number(amt||0));
+    if(m.hpUnknown){ m.damageTaken=(m.damageTaken||0)+n; }
+    else{ m.currentHP=Math.max(0,m.currentHP-n); m.damageTaken=Math.max(0,(m.maxHP??0)-(m.currentHP??0)); }
+    save(); render();
+  }
+  function heal(id,amt){
+    const m=monsters.find(x=>x.id===id); if(!m) return;
+    const n=Math.max(1,Number(amt||0));
+    if(m.hpUnknown){ m.damageTaken=Math.max(0,(m.damageTaken||0)-n); }
+    else{ m.currentHP=Math.min(m.maxHP,m.currentHP+n); m.damageTaken=Math.max(0,(m.maxHP??0)-(m.currentHP??0)); }
+    save(); render();
+  }
+
   function updateConditions(id,sel){const i=monsters.findIndex(x=>x.id===id);if(i<0)return;monsters[i].conditions=sel;save();render();}
   function deleteMonster(id){const m=monsters.find(x=>x.id===id);if(!m)return;if(confirm(`Delete ${m.name}?`)){monsters=monsters.filter(x=>x.id!==id);save();render();}}
 
   function escapeHtml(s){return String(s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
   function roundToNearest10(n){return Math.round(n/10)*10;}
 
-  // --- Bloodied estimator (fixed to keep exact damage) ---
+  // Bloodied: round ONLY maxHP; keep *exact* damage
   function setFromBloodied(id){
     const m=monsters.find(x=>x.id===id); if(!m) return;
-    const exactDamage=Math.max(0,m.damageTaken||0);
-    if(exactDamage<=0)return;
-    const estimatedMax=roundToNearest10(exactDamage*2);
-    m.maxHP=Math.max(1,estimatedMax);
-    m.currentHP=Math.max(0,m.maxHP-exactDamage); // exact damage
-    m.hpUnknown=false;
-    m.damageTaken=exactDamage;                   // keep exact
-    save();render();
+    const exactDamage = Math.max(0, Math.trunc(m.damageTaken || 0)); // ensure integer, keep exact
+    if(exactDamage<=0) return;
+
+    const estimatedMax = roundToNearest10(exactDamage * 2); // only max HP rounded
+    const currentExact = estimatedMax - exactDamage;        // exact remaining HP
+
+    m.maxHP     = Math.max(1, estimatedMax);
+    m.currentHP = Math.max(0, currentExact);
+    m.hpUnknown = false;
+    m.damageTaken = exactDamage; // keep exact damage tally
+
+    save(); render();
   }
 
   function rowTemplate(m){
@@ -114,35 +171,134 @@
     const skull=down?"💀 ":"";
     const condOptions=conditionsList.map(c=>`<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('');
     const condDisplay=m.conditions.length?`<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>`:"";
-    const thumb=`<a class="thumb-wrap ${down?'thumb-x':''}" href="${m.image||defaultImage}" target="_blank"><img class="thumb" src="${m.image||defaultImage}" onerror="this.onerror=null;this.src='${defaultImage}'"/></a>`;
+    const thumb=`<a class="thumb-wrap ${down?'thumb-x':''}" href="${m.image||defaultImage}" target="_blank" rel="noopener"><img class="thumb" src="${m.image||defaultImage}" alt="Monster image" onerror="this.onerror=null;this.src='${defaultImage}'"/></a>`;
     const hpLine=isKnown?`<div>HP: ${m.currentHP}/${m.maxHP}</div>`:`<div>HP: ? <span style="opacity:.8">· Damage so far:</span> ${m.damageTaken||0}</div>`;
     const bloodiedBtn=(!isKnown&&(m.damageTaken||0)>0)?`<button type="button" class="bloodied-btn" data-action="bloodied">Set HP from Bloodied</button>`:"";
-    return `<div class="${cls}" data-id="${m.id}">${thumb}<div><div class="name-line"><strong>${skull}${m.name}</strong> <span>(AC ${m.ac})</span><button type="button" class="mini-btn" data-action="edit">Edit</button><button type="button" class="mini-btn" data-action="delete">Delete</button><button type="button" class="mini-clone" data-action="duplicate">Duplicate</button></div>${bloodied&&!down?`<div class="bloodied">⚠️ Bloodied</div>`:""}${hpLine}<input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button><input class="heal" type="number" placeholder="Heal"/> <button class="do-heal">Heal</button>${bloodiedBtn}<div><select class="condSelect" multiple size="4">${condOptions}</select><button class="clear-cond" type="button">Clear Conditions</button></div>${condDisplay}</div></div>`;
+    return `<div class="${cls}" data-id="${m.id}">
+      ${thumb}
+      <div>
+        <div class="name-line">
+          <strong>${skull}${m.name}</strong> <span>(AC ${m.ac})</span>
+          <button type="button" class="mini-btn" data-action="edit">Edit</button>
+          <button type="button" class="mini-btn" data-action="delete">Delete</button>
+          <button type="button" class="mini-clone" data-action="duplicate">Duplicate</button>
+        </div>
+        ${bloodied&&!down?`<div class="bloodied">⚠️ Bloodied</div>`:""}
+        ${hpLine}
+        <input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button>
+        <input class="heal" type="number" placeholder="Heal"/>   <button class="do-heal">Heal</button>
+        ${bloodiedBtn}
+        <div>
+          <select class="condSelect" multiple size="4">${condOptions}</select>
+          <button class="clear-cond" type="button">Clear Conditions</button>
+        </div>
+        ${condDisplay}
+      </div>
+    </div>`;
   }
 
   function render(){
     const list=$('#list'); list.innerHTML=monsters.map(rowTemplate).join('');
     list.querySelectorAll('.row').forEach(row=>{
-      const id=row.dataset.id; const dmgInput=row.querySelector('.dmg'); const healInput=row.querySelector('.heal');
-      const dmgBtn=row.querySelector('.do-dmg'); const healBtn=row.querySelector('.do-heal');
+      const id=row.dataset.id;
+      const dmgInput=row.querySelector('.dmg');
+      const healInput=row.querySelector('.heal');
+
+      const dmgBtn=row.querySelector('.do-dmg');
+      const healBtn=row.querySelector('.do-heal');
       ['click','touchstart'].forEach(evt=>{
-        dmgBtn.addEventListener(evt,e=>{e.preventDefault();const v=Number(dmgInput.value||0);if(v>0){pendingFocus={id,field:'dmg'};damage(id,v);dmgInput.value='';}else dmgInput.focus();},{passive:false});
-        healBtn.addEventListener(evt,e=>{e.preventDefault();const v=Number(healInput.value||0);if(v>0){heal(id,v);healInput.value='';}else healInput.focus();},{passive:false});
+        dmgBtn.addEventListener(evt,e=>{
+          e.preventDefault();
+          const v=Number(dmgInput.value||0);
+          if(v>0){ pendingFocus={id,field:'dmg'}; damage(id,v); dmgInput.value=''; } else dmgInput.focus();
+        },{passive:false});
+        healBtn.addEventListener(evt,e=>{
+          e.preventDefault();
+          const v=Number(healInput.value||0);
+          if(v>0){ heal(id,v); healInput.value=''; } else healInput.focus();
+        },{passive:false});
       });
-      dmgInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(dmgInput.value||0);if(v>0){pendingFocus={id,field:'dmg'};damage(id,v);dmgInput.value='';}}});
-      healInput.addEventListener('keypress',e=>{if(e.key==='Enter'){e.preventDefault();const v=Number(healInput.value||0);if(v>0){heal(id,v);healInput.value='';}}});
-      row.querySelectorAll('button[data-action]').forEach(btn=>{['click','touchstart'].forEach(evt=>{btn.addEventListener(evt,e=>{e.preventDefault();const act=btn.dataset.action;if(act==='delete')deleteMonster(id);if(act==='duplicate')duplicateMonster(id);if(act==='bloodied')setFromBloodied(id);},{passive:false});});});
-      const condSel=row.querySelector('.condSelect');condSel.onchange=()=>{const sel=[...condSel.options].filter(o=>o.selected).map(o=>o.value);updateConditions(id,sel);};row.querySelector('.clear-cond').onclick=e=>{e.preventDefault();updateConditions(id,[]);};
+
+      dmgInput.addEventListener('keypress',e=>{
+        if(e.key==='Enter'){ e.preventDefault(); const v=Number(dmgInput.value||0); if(v>0){ pendingFocus={id,field:'dmg'}; damage(id,v); dmgInput.value=''; } }
+      });
+      healInput.addEventListener('keypress',e=>{
+        if(e.key==='Enter'){ e.preventDefault(); const v=Number(healInput.value||0); if(v>0){ heal(id,v); healInput.value=''; } }
+      });
+
+      // Edit / Delete / Duplicate / Bloodied
+      row.querySelectorAll('button[data-action]').forEach(btn=>{
+        ['click','touchstart'].forEach(evt=>{
+          btn.addEventListener(evt,e=>{
+            e.preventDefault();
+            const act=btn.dataset.action;
+            if(act==='delete') deleteMonster(id);
+            if(act==='duplicate') duplicateMonster(id);
+            if(act==='bloodied')  setFromBloodied(id);
+          },{passive:false});
+        });
+      });
+
+      const condSel=row.querySelector('.condSelect');
+      condSel.onchange=()=>{ const sel=[...condSel.options].filter(o=>o.selected).map(o=>o.value); updateConditions(id,sel); };
+      row.querySelector('.clear-cond').onclick=e=>{ e.preventDefault(); updateConditions(id,[]); };
     });
-    if(pendingFocus){const {id,field}=pendingFocus;const rowEl=document.querySelector(`.row[data-id="${id}"]`);if(rowEl){const inputEl=rowEl.querySelector(field==='dmg'?'.dmg':'.heal');if(inputEl)setTimeout(()=>{inputEl.focus();},0);}pendingFocus=null;}
+
+    if(pendingFocus){
+      const {id,field}=pendingFocus;
+      const rowEl=document.querySelector(`.row[data-id="${id}"]`);
+      if(rowEl){
+        const inputEl=rowEl.querySelector(field==='dmg'?'.dmg':'.heal');
+        if(inputEl) setTimeout(()=>{inputEl.focus();},0);
+      }
+      pendingFocus=null;
+    }
   }
 
-  $('#addForm').addEventListener('submit',e=>{e.preventDefault();addMonster($('#name').value,$('#hp').value,$('#ac').value,tempImage||defaultImage);e.target.reset();tempImage=null;imageJustPicked=false;$('#imgBtn').textContent="Choose Image";$('#imgBtn').classList.remove('selected');$('#name').focus();});
-  const addBtn=document.querySelector('#addForm button[type="submit"]');addBtn.addEventListener('click',()=>{submitForm();});addBtn.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitForm();}});
+  // Add monster form
+  $('#addForm').addEventListener('submit',e=>{
+    e.preventDefault();
+    addMonster($('#name').value,$('#hp').value,$('#ac').value,tempImage||defaultImage);
+    e.target.reset();
+    tempImage=null;
+    imageJustPicked=false;
+    $('#imgBtn').textContent="Choose Image";
+    $('#imgBtn').classList.remove('selected');
+    $('#name').focus();
+  });
+
+  const addBtn=document.querySelector('#addForm button[type="submit"]');
+  addBtn.addEventListener('click',()=>{submitForm();});
+  addBtn.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitForm();}});
+
   $('#clearAll').addEventListener('click',()=>{if(confirm('Clear all monsters?')){monsters=[];save();render();}});
-  $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());$('#imgBtn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitForm();}});
-  $('#imgFile').addEventListener('change',async e=>{const file=e.target.files[0];if(file){try{tempImage=await compressImageToDataURL(file);}catch{tempImage=null;}imageJustPicked=true;$('#imgBtn').textContent="Image Selected";$('#imgBtn').classList.add("selected");$('#imgBtn').blur();$('#name').focus();}else{tempImage=null;imageJustPicked=false;$('#imgBtn').textContent="Choose Image";$('#imgBtn').classList.remove("selected");$('#imgBtn').blur();$('#name').focus();}});
-  ['keydown','keypress','keyup'].forEach(evt=>{document.addEventListener(evt,e=>{if((evt==='keydown'||evt==='keypress'||evt==='keyup')&&e.key==='Enter'&&imageJustPicked){e.preventDefault();submitForm();}}, {passive:false});});
+
+  $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());
+  $('#imgBtn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitForm();}});
+  $('#imgFile').addEventListener('change',async e=>{
+    const file=e.target.files[0];
+    if(file){
+      try{ tempImage=await compressImageToDataURL(file); }catch{ tempImage=null; }
+      imageJustPicked=true;
+      $('#imgBtn').textContent="Image Selected";
+      $('#imgBtn').classList.add("selected");
+      $('#imgBtn').blur();
+      $('#name').focus();
+    }else{
+      tempImage=null; imageJustPicked=false;
+      $('#imgBtn').textContent="Choose Image";
+      $('#imgBtn').classList.remove("selected");
+      $('#imgBtn').blur();
+      $('#name').focus();
+    }
+  });
+
+  ['keydown','keypress','keyup'].forEach(evt=>{
+    document.addEventListener(evt,e=>{
+      if((evt==='keydown'||evt==='keypress'||evt==='keyup')&&e.key==='Enter'&&imageJustPicked){ e.preventDefault(); submitForm(); }
+    },{passive:false});
+  });
+
   render();
 })();
 </script>
