@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Monster HP Tracker</title>
+<style>
+  body{background:#0b0b0c;color:#e8eaed;font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:20px;}
+  .card{background:#131316;border:1px solid #2a2a31;border-radius:14px;padding:12px;}
+  input,button,select{padding:8px;margin:4px;border-radius:8px;border:1px solid #2a2a31;background:#1f1f24;color:#e8eaed;}
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
+  input[type=number]{ -moz-appearance: textfield; }
+  button{cursor:pointer;}
+  .image-btn.selected{background:#0b5bd3;color:#fff;}
+
+  #list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px;}
+  @media (max-width: 600px){ #list{grid-template-columns:1fr;} }
+
+  .row{margin:8px 0;padding:8px;border-radius:10px;display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;position:relative;}
+  .row.alive{background:#0e1a12;}
+  .row.down{background:#1f0f12;}
+  .row.bloodied{background:#3a3100;}
+  .bloodied{color:#ff6b6b;font-weight:600;}
+  .conditions{margin-top:6px;font-size:0.9em;color:#d4d4d4;}
+  .name-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+
+  .thumb-wrap{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid #2a2a31;background:#0f1113;display:flex;align-items:center;justify-content:center;}
+  .thumb{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb-x::after{content:"✖";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:42px;color:#ff0000;pointer-events:none;}
+
+  .mini-btn{font-size:0.8em;background:#444;border-color:#555;margin-left:6px;}
+  /* Make Duplicate look like the other mini buttons */
+  .mini-clone{font-size:0.8em;background:#444;border-color:#555;margin-left:6px;}
+
+  /* Dialog */
+  dialog{border:1px solid #2a2a31;background:#131316;color:#e8eaed;border-radius:12px;padding:16px;max-width:520px;width:calc(100% - 24px);}
+  dialog::backdrop{background:rgba(0,0,0,0.55);}
+  .dlg-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .dlg-row{margin:8px 0;}
+  .dlg-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
+  .danger{background:#7a1f25;border-color:#a43a42;}
+  .ghost{background:#1b1b20;border-color:#2a2a31;}
+
+  /* Banner image styling */
+  .banner{
+    display:block;
+    width:100%;
+    height:auto;
+    max-height:220px;
+    object-fit:contain;   /* show entire image */
+    background:#131316;   /* behind letterboxing */
+    margin-bottom:12px;
+    border-radius:12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Banner image -->
+<img src="IMG_9858.jpeg" alt="Banner" class="banner">
+
+<div class="card">
+  <form id="addForm">
+    <input id="name" placeholder="Monster Name" required />
+    <input id="hp" type="number" placeholder="Max HP" min="1" required />
+    <input id="ac" type="number" placeholder="AC" />
+    <input id="imgFile" type="file" accept="image/*" style="display:none" />
+    <button id="imgBtn" type="button" class="image-btn">Choose Image</button>
+    <button type="submit">Add</button>
+    <button id="clearAll" type="button">Clear All Monsters</button>
+  </form>
+</div>
+
+<div id="list"></div>
+
+<script>
+(()=>{
+  const $ = s => document.querySelector(s);
+  const storeKey = 'monster_hp_v9';
+  const defaultImage = new URL('default-monster.png', location.href).href;
+
+  const genId = () =>
+    (window.crypto && typeof crypto.randomUUID === "function")
+      ? crypto.randomUUID()
+      : ("id_" + Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+  let monsters = load();
+  let tempImage = null;
+  let pendingFocus = null; // { id: string, field: 'dmg' }
+  let imageJustPicked = false; // iPad quirk flag
+
+  // --- small helper to submit the form robustly on iPad ---
+  function submitForm() {
+    const form = $('#addForm');
+    if (form.requestSubmit) form.requestSubmit();
+    else form.dispatchEvent(new Event('submit', {cancelable:true, bubbles:true}));
+  }
+
+  // --- compress to keep iOS localStorage happy (prevents quota errors) ---
+  async function compressImageToDataURL(file, maxSide=700, quality=0.82){
+    return new Promise((resolve, reject)=>{
+      const fr = new FileReader();
+      fr.onerror = ()=>reject(new Error('read'));
+      fr.onload = ()=>{
+        const img = new Image();
+        img.onload = ()=>{
+          const canvas = document.createElement('canvas');
+          let {width, height} = img;
+          const scale = Math.min(1, maxSide / Math.max(width, height));
+          width = Math.max(1, Math.round(width * scale));
+          height = Math.max(1, Math.round(height * scale));
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d', {alpha: false});
+          ctx.drawImage(img, 0, 0, width, height);
+          // Use JPEG for broad iOS compatibility & small size
+          try{
+            const dataURL = canvas.toDataURL('image/jpeg', quality);
+            resolve(dataURL);
+          }catch(e){
+            // Fallback to original data if canvas export fails
+            resolve(fr.result);
+          }
+        };
+        img.onerror = ()=>reject(new Error('img'));
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+
+  const conditionsList = [
+    "Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled",
+    "Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone",
+    "Restrained","Stunned","Unconscious"
+  ];
+
+  function save(){
+    try{
+      localStorage.setItem(storeKey, JSON.stringify(monsters));
+    }catch(e){
+      alert('Storage is full for images. Try a smaller image.');
+    }
+  }
+  function load(){
+    try{
+      const raw = localStorage.getItem(storeKey);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.map(m => ({
+        id: m.id || genId(),
+        name: (m.name || '').trim(),
+        maxHP: Number(m.maxHP || m.maxHp || 1),
+        currentHP: Math.max(0, Math.min(Number(m.currentHP ?? m.hp ?? m.maxHP ?? 1), Number(m.maxHP || m.maxHp || 1))),
+        ac: Number(m.ac || 0),
+        conditions: Array.isArray(m.conditions) ? m.conditions : [],
+        image: m.image || defaultImage
+      })) : [];
+    }catch{ return []; }
+  }
+
+  function addMonster(name,maxHP,ac=0,img=defaultImage){
+    name = (name || '').trim();
+    const hp = Number(maxHP);
+    if(!name || !(hp>0)) return;
+    monsters.push({
+      id: genId(),
+      name,
+      maxHP: hp,
+      currentHP: hp,
+      ac: Number(ac) || 0,
+      conditions: [],
+      image: img || defaultImage
+    });
+    save(); render();
+  }
+
+  function nextDuplicateName(baseName){
+    const root = baseName.replace(/\s\d+$/, '');
+    const nums = monsters
+      .map(m => m.name)
+      .filter(n => n === root || n.startsWith(root + ' '))
+      .map(n => {
+        const m = n.match(/\s(\d+)$/);
+        return m ? parseInt(m[1],10) : 1;
+      });
+    const maxNum = nums.length ? Math.max(...nums) : 1;
+    const next = Math.max(2, maxNum + 1);
+    return `${root} ${next}`;
+  }
+
+  function duplicateMonster(id){
+    const m = monsters.find(x=>x.id===id); if(!m) return;
+    const dup = { 
+      ...m, 
+      id: genId(), 
+      name: nextDuplicateName(m.name),
+      image: m.image || defaultImage // ensure image is copied
+    };
+    monsters.push(dup);
+    save(); render();
+  }
+
+  function damage(id,amt){
+    const m = monsters.find(x=>x.id===id); if(!m) return;
+    const n = Math.max(1, Number(amt||0));
+    m.currentHP = Math.max(0, m.currentHP - n);
+    save(); render();
+  }
+  function heal(id,amt){
+    const m = monsters.find(x=>x.id===id); if(!m) return;
+    const n = Math.max(1, Number(amt||0));
+    m.currentHP = Math.min(m.maxHP, m.currentHP + n);
+    save(); render();
+  }
+  function updateConditions(id,selected){
+    const i = monsters.findIndex(x=>x.id===id); if(i<0) return;
+    monsters[i].conditions = selected;
+    save(); render();
+  }
+  function deleteMonster(id){
+    const m = monsters.find(x=>x.id===id); if(!m) return;
+    if(confirm(`Are you sure you want to delete ${m.name}?`)){
+      monsters = monsters.filter(x=>x.id!==id);
+      save(); render();
+    }
+  }
+
+  function openEditDialog(id){
+    const m = monsters.find(x=>x.id===id); if(!m) return;
+
+    const dlg = document.createElement('dialog');
+    dlg.innerHTML = `
+      <form method="dialog">
+        <h3 style="margin:0 0 10px 0;">Edit ${escapeHtml(m.name)}</h3>
+
+        <div class="dlg-grid">
+          <label class="dlg-row">Name
+            <input id="edName" value="${escapeHtml(m.name)}" />
+          </label>
+          <label class="dlg-row">AC
+            <input id="edAC" type="number" min="0" value="${m.ac}" />
+          </label>
+
+          <label class="dlg-row">Max HP
+            <input id="edMax" type="number" min="1" value="${m.maxHP}" />
+          </label>
+          <label class="dlg-row">Current HP
+            <input id="edCur" type="number" min="0" value="${m.currentHP}" />
+          </label>
+        </div>
+
+        <div class="dlg-row">
+          <label style="display:block;margin-bottom:6px;">Conditions</label>
+          <select id="edConds" multiple size="6" style="width:100%;">${
+            conditionsList.map(c => `<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`).join('')
+          }</select>
+        </div>
+
+        <div class="dlg-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <img src="${m.image || defaultImage}" alt="Preview" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid #2a2a31;"
+               onerror="this.onerror=null; this.src='${defaultImage}'">
+          <input id="edImg" type="file" accept="image/*" style="display:none" />
+          <button id="edChoose" type="button" class="ghost">Choose New Image</button>
+          <button id="edRemove" type="button" class="ghost">Remove Image</button>
+        </div>
+
+        <div class="dlg-actions">
+          <button id="edDelete" type="button" class="danger">Delete</button>
+          <span style="flex:1"></span>
+          <button id="edCancel" type="button" class="ghost">Cancel</button>
+          <button id="edSave" type="submit">Save</button>
+        </div>
+      </form>
+    `;
+    document.body.appendChild(dlg);
+
+    const edImg = dlg.querySelector('#edImg');
+    dlg.querySelector('#edChoose').onclick = () => edImg.click();
+    dlg.querySelector('#edRemove').onclick = () => {
+      m.image = defaultImage;
+      dlg.querySelector('img').src = defaultImage;
+    };
+    dlg.querySelector('#edDelete').onclick = () => {
+      if(confirm(`Are you sure you want to delete ${m.name}?`)){
+        monsters = monsters.filter(x=>x.id!==id);
+        save(); render(); dlg.close();
+      }
+    };
+    dlg.querySelector('#edCancel').onclick = () => dlg.close();
+
+    dlg.querySelector('#edSave').onclick = async (e) => {
+      e.preventDefault();
+      const newName = dlg.querySelector('#edName').value.trim();
+      const newAC   = Number(dlg.querySelector('#edAC').value);
+      const newMax  = Math.max(1, Number(dlg.querySelector('#edMax').value));
+      let   newCur  = Math.max(0, Number(dlg.querySelector('#edCur').value));
+      const newConds = [...dlg.querySelector('#edConds').options].filter(o=>o.selected).map(o=>o.value);
+
+      if(newName) m.name = newName;
+      if(!Number.isNaN(newAC)) m.ac = newAC;
+      if(!Number.isNaN(newMax)) m.maxHP = newMax;
+      if(!Number.isNaN(newCur)) m.currentHP = newCur;
+
+      if(m.currentHP > m.maxHP) m.currentHP = m.maxHP;
+      if(m.currentHP < 0) m.currentHP = 0;
+
+      m.conditions = newConds;
+
+      const file = edImg.files && edImg.files[0];
+      if(file){
+        try{
+          const dataURL = await compressImageToDataURL(file);
+          m.image = dataURL || defaultImage;
+        }catch{
+          m.image = defaultImage;
+        }
+      }
+      save(); render(); dlg.close();
+    };
+
+    dlg.addEventListener('close', ()=> dlg.remove());
+    dlg.showModal();
+  }
+
+  function escapeHtml(s){return String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+
+  function rowTemplate(m){
+    const bloodied = m.currentHP <= m.maxHP/2 && m.currentHP > 0;
+    const down = m.currentHP <= 0;
+    const cls = down ? "row down" : bloodied ? "row bloodied" : "row alive";
+    const skull = down ? "💀 " : "";
+    const condOptions = conditionsList.map(c =>
+      `<option value="${c}" ${m.conditions.includes(c)?'selected':''}>${c}</option>`
+    ).join('');
+    const condDisplay = m.conditions.length ? `<div class="conditions">Conditions: ${m.conditions.join(", ")}</div>` : "";
+
+    const thumb = `
+      <a class="thumb-wrap ${down ? 'thumb-x' : ''}" href="${m.image || defaultImage}" target="_blank" rel="noopener">
+        <img class="thumb" src="${m.image || defaultImage}" alt="Monster image"
+             onerror="this.onerror=null; this.src='${defaultImage}'"/>
+      </a>`;
+
+    return `<div class="${cls}" data-id="${m.id}">
+      ${thumb}
+      <div>
+        <div class="name-line">
+          <strong>${skull}${m.name}</strong> <span>(AC ${m.ac})</span>
+          <button type="button" class="mini-btn" data-action="edit">Edit</button>
+          <button type="button" class="mini-btn" data-action="delete">Delete</button>
+          <button type="button" class="mini-clone" data-action="duplicate" title="Duplicate">Duplicate</button>
+        </div>
+        ${bloodied && !down ? `<div class="bloodied">⚠️ Bloodied</div>` : ``}
+        <div>HP: ${m.currentHP}/${m.maxHP}</div>
+        <input class="dmg" type="number" placeholder="Damage"/> <button class="do-dmg">Damage</button>
+        <input class="heal" type="number" placeholder="Heal"/>   <button class="do-heal">Heal</button>
+        <div>
+          <select class="condSelect" multiple size="4">${condOptions}</select>
+          <button class="clear-cond" type="button">Clear Conditions</button>
+        </div>
+        ${condDisplay}
+      </div>
+    </div>`;
+  }
+
+  function render(){
+    const list = $('#list');
+    list.innerHTML = monsters.map(rowTemplate).join('');
+
+    list.querySelectorAll('.row').forEach(row=>{
+      const id = row.dataset.id;
+      const dmgInput = row.querySelector('.dmg');
+      const healInput = row.querySelector('.heal');
+
+      // Buttons (click + touchstart for iPad reliability)
+      const dmgBtn = row.querySelector('.do-dmg');
+      const healBtn = row.querySelector('.do-heal');
+      ['click','touchstart'].forEach(evt=>{
+        dmgBtn.addEventListener(evt, e=>{
+          e.preventDefault();
+          const v = Number(dmgInput.value||0);
+          if(v>0){
+            pendingFocus = { id, field: 'dmg' };
+            damage(id,v);
+            dmgInput.value = '';
+          } else {
+            dmgInput.focus();
+          }
+        }, {passive:false});
+        healBtn.addEventListener(evt, e=>{
+          e.preventDefault();
+          const v = Number(healInput.value||0);
+          if(v>0){
+            heal(id,v);
+            healInput.value = '';
+          } else {
+            healInput.focus();
+          }
+        }, {passive:false});
+      });
+
+      // Enter-to-apply — keep focus in Damage box
+      dmgInput.addEventListener('keypress',e=>{
+        if(e.key==='Enter'){
+          e.preventDefault();
+          const v=Number(dmgInput.value||0);
+          if(v>0){
+            pendingFocus = { id, field: 'dmg' };
+            damage(id,v);
+            dmgInput.value='';
+          } else {
+            dmgInput.focus();
+          }
+        }
+      });
+      healInput.addEventListener('keypress',e=>{
+        if(e.key==='Enter'){
+          e.preventDefault();
+          const v=Number(healInput.value||0);
+          if(v>0){
+            heal(id,v);
+            healInput.value='';
+          } else {
+            healInput.focus();
+          }
+        }
+      });
+
+      // Edit / Delete / Duplicate
+      row.querySelectorAll('button[data-action]').forEach(btn=>{
+        ['click','touchstart'].forEach(evt=>{
+          btn.addEventListener(evt, e=>{
+            e.preventDefault();
+            const act = btn.dataset.action;
+            if(act === 'edit')      openEditDialog(id);
+            if(act === 'delete')    deleteMonster(id);
+            if(act === 'duplicate') duplicateMonster(id);
+          }, {passive:false});
+        });
+      });
+
+      // Conditions
+      const condSel = row.querySelector('.condSelect');
+      condSel.onchange = () => {
+        const selected=[...condSel.options].filter(o=>o.selected).map(o=>o.value);
+        updateConditions(id,selected);
+      };
+      row.querySelector('.clear-cond').onclick = (e)=>{ e.preventDefault(); updateConditions(id,[]); };
+    });
+
+    // After re-render, restore focus for the damage input if requested
+    if (pendingFocus) {
+      const { id: focusId, field } = pendingFocus;
+      const rowEl = document.querySelector(`.row[data-id="${focusId}"]`);
+      if (rowEl) {
+        const inputEl = rowEl.querySelector(field === 'dmg' ? '.dmg' : '.heal');
+        if (inputEl) setTimeout(() => { inputEl.focus(); }, 0);
+      }
+      pendingFocus = null;
+    }
+  }
+
+  // Add monster form
+  $('#addForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    addMonster($('#name').value, $('#hp').value, $('#ac').value, tempImage || defaultImage);
+    e.target.reset();
+    tempImage = null;
+    imageJustPicked = false; // reset after successful add
+    $('#imgBtn').textContent = "Choose Image";
+    $('#imgBtn').classList.remove('selected');
+    $('#name').focus();
+  });
+
+  // iPad-safe Add button: use only click + Enter key
+  const addBtn = document.querySelector('#addForm button[type="submit"]');
+  addBtn.addEventListener('click', () => { submitForm(); });
+  addBtn.addEventListener('keydown', (e)=>{
+    if (e.key === 'Enter') { e.preventDefault(); submitForm(); }
+  });
+
+  // Clear all
+  $('#clearAll').addEventListener('click',()=>{
+    if(confirm('Are you sure you want to clear all monsters?')){
+      monsters=[]; save(); render();
+    }
+  });
+
+  // Image choose for ADD
+  $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());
+  // If Enter is pressed while image button has focus, submit the form (don’t reopen picker)
+  $('#imgBtn').addEventListener('keydown',(e)=>{
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      submitForm();
+    }
+  });
+  $('#imgFile').addEventListener('change',async e=>{
+    const file=e.target.files[0];
+    if(file){
+      try{
+        const dataURL = await compressImageToDataURL(file);
+        tempImage = dataURL;
+      }catch{
+        tempImage = null;
+      }
+      imageJustPicked = true;
+      $('#imgBtn').textContent="Image Selected";
+      $('#imgBtn').classList.add("selected");
+      $('#imgBtn').blur();
+      $('#name').focus(); // return focuses here, but Enter will submit due to handlers below
+    } else {
+      tempImage = null;
+      imageJustPicked = false;
+      $('#imgBtn').textContent="Choose Image";
+      $('#imgBtn').classList.remove("selected");
+      $('#imgBtn').blur();
+      $('#name').focus();
+    }
+  });
+
+  // If we just picked an image, pressing Enter anywhere should add the monster
+  ['keydown','keypress','keyup'].forEach(evt=>{
+    document.addEventListener(evt,(e)=>{
+      if ((evt==='keydown' || evt==='keypress' || evt==='keyup') && e.key === 'Enter' && imageJustPicked){
+        e.preventDefault();
+        submitForm();
+      }
+    }, { passive:false });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
