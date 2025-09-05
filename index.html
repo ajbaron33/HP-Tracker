@@ -140,11 +140,8 @@
     name = (name || '').trim();
     if(!name) return;
 
-    // HP
     const hp = Number(maxHP);
     const hpKnown = Number.isFinite(hp) && hp > 0;
-
-    // AC (null if blank)
     const acNum = (ac===null || ac===undefined || ac==='') ? null : (Number.isFinite(+ac) ? Number(ac) : null);
 
     monsters.push({
@@ -323,24 +320,25 @@
   function escapeHtml(s){return String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
   function roundToNearest10(n){ return Math.round(n/10)*10; }
 
-  // --- Bloodied: round ONLY Max HP; preserve current HP exactly if known ---
+  // --- Bloodied: round ONLY Max HP; if HP was unknown, set currentHP = exact damage ---
   function setFromBloodied(id){
     const m=monsters.find(x=>x.id===id); if(!m) return;
 
-    const exactDamage = Math.max(0, Math.trunc(m.damageTaken || 0)); // exact tally so far
+    const exactDamage = Math.max(0, Math.trunc(m.damageTaken || 0)); // what you've tallied
     if(exactDamage<=0) return;
 
-    const estimatedMax = roundToNearest10(exactDamage * 2); // only max rounded
-
+    const estimatedMax = roundToNearest10(exactDamage * 2); // only Max is rounded
     m.maxHP = Math.max(1, estimatedMax);
+
     if (m.currentHP == null) {
-      // If we never had a currentHP (unknown mode), derive it once from exact damage.
-      m.currentHP = Math.max(0, m.maxHP - exactDamage);
+      // Your request: when we didn’t know HP, keep the "HP" equal to the damage you tracked.
+      // Example: damage=3 -> Max=10, Current=3
+      m.currentHP = exactDamage;
     }
-    // If currentHP was already known (e.g., user set it), leave it exactly as-is.
+    // If currentHP already known, we leave it as-is.
 
     m.hpUnknown = false;
-    // Recompute damage from the *new* max and the preserved current.
+    // Recompute damage to match the now-known numbers
     m.damageTaken = Math.max(0, m.maxHP - m.currentHP);
 
     save(); render();
