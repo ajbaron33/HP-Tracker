@@ -72,7 +72,11 @@
   const $ = s => document.querySelector(s);
   const storeKey = 'monster_hp_v9';
   const defaultImage = new URL('default-monster.png', location.href).href;
-  const genId = () => (crypto.randomUUID ? crypto.randomUUID() : ("id_" + Date.now().toString(36) + Math.random().toString(36).slice(2)));
+
+  const genId = () =>
+    (window.crypto && typeof crypto.randomUUID === "function")
+      ? crypto.randomUUID()
+      : ("id_" + Date.now().toString(36) + Math.random().toString(36).slice(2));
 
   let monsters = load();
   let tempImage = null;
@@ -80,38 +84,41 @@
   let imageJustPicked = false;
 
   function submitForm(){ const form=$('#addForm'); if(form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit',{cancelable:true,bubbles:true})); }
+
+  // compress images
   async function compressImageToDataURL(file,maxSide=700,quality=0.82){
-    return new Promise((resolve,reject)=>{
-      const fr=new FileReader();
-      fr.onerror=()=>reject(new Error('read'));
-      fr.onload=()=>{
-        const img=new Image();
-        img.onload=()=>{
-          const canvas=document.createElement('canvas');
-          let {width,height}=img;
-          const scale=Math.min(1,maxSide/Math.max(width,height));
-          width=Math.max(1,Math.round(width*scale));
-          height=Math.max(1,Math.round(height*scale));
-          canvas.width=width; canvas.height=height;
-          const ctx=canvas.getContext('2d',{alpha:false});
+    return new Promise((resolve, reject)=>{
+      const fr = new FileReader();
+      fr.onerror = ()=>reject(new Error('read'));
+      fr.onload = ()=>{
+        const img = new Image();
+        img.onload = ()=>{
+          const canvas = document.createElement('canvas');
+          let {width,height} = img;
+          const scale = Math.min(1, maxSide / Math.max(width, height));
+          width = Math.max(1, Math.round(width*scale));
+          height = Math.max(1, Math.round(height*scale));
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d', {alpha:false});
           ctx.drawImage(img,0,0,width,height);
-          try{ resolve(canvas.toDataURL('image/jpeg',quality)); } catch { resolve(fr.result); }
+          try{ resolve(canvas.toDataURL('image/jpeg',quality)); }
+          catch{ resolve(fr.result); }
         };
-        img.onerror=()=>reject(new Error('img'));
-        img.src=fr.result;
+        img.onerror = ()=>reject(new Error('img'));
+        img.src = fr.result;
       };
       fr.readAsDataURL(file);
     });
   }
 
-  const conditionsList=["Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
+  const conditionsList = ["Blinded","Charmed","Deafened","Exhaustion","Frightened","Grappled","Incapacitated","Invisible","Paralyzed","Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"];
 
-  function save(){ try{localStorage.setItem(storeKey,JSON.stringify(monsters));}catch{alert('Storage is full for images. Try a smaller image.');} }
+  function save(){ try{ localStorage.setItem(storeKey, JSON.stringify(monsters)); }catch{ alert('Storage is full for images. Try a smaller image.'); } }
 
   function load(){
     try{
-      const raw=localStorage.getItem(storeKey);
-      const arr=raw?JSON.parse(raw):[];
+      const raw = localStorage.getItem(storeKey);
+      const arr = raw ? JSON.parse(raw) : [];
       if(!Array.isArray(arr)) return [];
       return arr.map(m=>{
         const hasKnown = m.maxHP!=null && m.currentHP!=null && m.maxHP!=='' && m.currentHP!=='';
@@ -119,17 +126,17 @@
         const currentHP = hasKnown ? Number(m.currentHP) : null;
         const hpUnknown = !hasKnown || m.hpUnknown===true;
         const damageTaken = Number.isFinite(+m.damageTaken) ? Math.max(0,+m.damageTaken)
-                         : (hasKnown ? Math.max(0, maxHP - currentHP) : 0);
+                          : (hasKnown ? Math.max(0, maxHP - currentHP) : 0);
         const acVal = (m.ac===null || m.ac==='') ? null : (Number.isFinite(+m.ac) ? Number(m.ac) : null);
         return {
           id: m.id || genId(),
-          name: (m.name || '').trim(),
+          name: (m.name||'').trim(),
           maxHP: hpUnknown ? null : maxHP,
           currentHP: hpUnknown ? null : Math.max(0, Math.min(currentHP, maxHP)),
           damageTaken,
           hpUnknown,
           ac: acVal,
-          conditions: Array.isArray(m.conditions) ? m.conditions : [],
+          conditions: Array.isArray(m.conditions)?m.conditions:[],
           image: m.image || defaultImage
         };
       });
@@ -161,7 +168,7 @@
   function nextDuplicateName(baseName){
     const root = baseName.replace(/\s\d+$/, '');
     const nums = monsters.map(m => m.name).filter(n => n===root || n.startsWith(root+' '))
-                  .map(n => { const m=n.match(/\s(\d+)$/); return m?parseInt(m[1],10):1; });
+      .map(n => { const m=n.match(/\s(\d+)$/); return m?parseInt(m[1],10):1; });
     const maxNum = nums.length ? Math.max(...nums) : 1;
     return `${root} ${Math.max(2, maxNum + 1)}`;
   }
@@ -210,6 +217,7 @@
     monsters[i].conditions = selected;
     save(); render();
   }
+
   function deleteMonster(id){
     const m = monsters.find(x=>x.id===id); if(!m) return;
     if(confirm(`Are you sure you want to delete ${m.name}?`)){
@@ -318,27 +326,23 @@
   }
 
   function escapeHtml(s){return String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
-  function roundToNearest10(n){ return Math.round(n/10)*10; }
 
-  // --- Bloodied: round ONLY Max HP; if HP was unknown, set currentHP = exact damage ---
+  // --- Bloodied: Max = damageTaken × 2; if unknown, set currentHP = damageTaken ---
   function setFromBloodied(id){
-    const m=monsters.find(x=>x.id===id); if(!m) return;
+    const m = monsters.find(x=>x.id===id); if(!m) return;
 
-    const exactDamage = Math.max(0, Math.trunc(m.damageTaken || 0)); // what you've tallied
-    if(exactDamage<=0) return;
+    const exactDamage = Math.max(0, Math.trunc(m.damageTaken || 0));
+    if (exactDamage <= 0) return;
 
-    const estimatedMax = roundToNearest10(exactDamage * 2); // only Max is rounded
-    m.maxHP = Math.max(1, estimatedMax);
+    m.maxHP = exactDamage * 2;
 
     if (m.currentHP == null) {
-      // Your request: when we didn’t know HP, keep the "HP" equal to the damage you tracked.
-      // Example: damage=3 -> Max=10, Current=3
+      // Establish currentHP once if we were in unknown mode: equal to damage so far.
       m.currentHP = exactDamage;
     }
-    // If currentHP already known, we leave it as-is.
+    // If currentHP was already tracked (known mode), leave it unchanged.
 
     m.hpUnknown = false;
-    // Recompute damage to match the now-known numbers
     m.damageTaken = Math.max(0, m.maxHP - m.currentHP);
 
     save(); render();
@@ -367,8 +371,14 @@
     const thumb=`<a class="thumb-wrap ${down?'thumb-x':''}" href="${m.image||defaultImage}" target="_blank" rel="noopener">
       <img class="thumb" src="${m.image||defaultImage}" alt="Monster image" onerror="this.onerror=null;this.src='${defaultImage}'"/>
     </a>`;
-    const hpLine=isKnown?`<div>HP: ${m.currentHP}/${m.maxHP}</div>`:`<div>HP: ? <span style="opacity:.8">· Damage so far:</span> ${m.damageTaken||0}</div>`;
-    const bloodiedBtn=(!isKnown&&(m.damageTaken||0)>0)?`<button type="button" class="bloodied-btn" data-action="bloodied">Set HP from Bloodied</button>`:"";
+
+    const hpLine=isKnown
+      ? `<div>HP: ${m.currentHP}/${m.maxHP}</div>`
+      : `<div>HP: ? <span style="opacity:.8">· Damage so far:</span> ${m.damageTaken||0}</div>`;
+
+    const bloodiedBtn=(!isKnown&&(m.damageTaken||0)>0)
+      ? `<button type="button" class="bloodied-btn" data-action="bloodied">Set HP from Bloodied</button>` : "";
+
     const acFrag = acDisplayFragment(m);
 
     return `<div class="${cls}" data-id="${m.id}">
@@ -447,7 +457,7 @@
         }
       });
 
-      // Actions: edit/delete/duplicate/bloodied/set-ac
+      // Actions (edit/delete/duplicate/bloodied/set-ac)
       row.querySelectorAll('button[data-action]').forEach(btn=>{
         ['click','touchstart'].forEach(evt=>{
           btn.addEventListener(evt, e=>{
@@ -469,7 +479,7 @@
         });
       });
 
-      // AC inline enter key
+      // AC inline Enter
       const acInput = row.querySelector('.ac-inline');
       if (acInput) {
         acInput.addEventListener('keypress', e=>{
@@ -490,7 +500,7 @@
       row.querySelector('.clear-cond').onclick = (e)=>{ e.preventDefault(); updateConditions(id,[]); };
     });
 
-    // restore focus to damage after action
+    // Restore focus to damage box after action
     if (pendingFocus) {
       const { id: focusId, field } = pendingFocus;
       const rowEl = document.querySelector(`.row[data-id="${focusId}"]`);
@@ -514,16 +524,14 @@
     $('#name').focus();
   });
 
-  const addBtn=document.querySelector('#addForm button[type="submit"]');
-  addBtn.addEventListener('click',()=>{submitForm();});
-  addBtn.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitForm();}});
-
+  // Clear all
   $('#clearAll').addEventListener('click',()=>{
     if(confirm('Are you sure you want to clear all monsters?')){
       monsters=[]; save(); render();
     }
   });
 
+  // Image choose
   $('#imgBtn').addEventListener('click',()=>$('#imgFile').click());
   $('#imgBtn').addEventListener('keydown',e=>{
     if(e.key==='Enter'){ e.preventDefault(); submitForm(); }
@@ -547,6 +555,7 @@
     }
   });
 
+  // iPad safe: if we just picked an image, Enter anywhere submits
   ['keydown','keypress','keyup'].forEach(evt=>{
     document.addEventListener(evt,(e)=>{
       if ((evt==='keydown'||evt==='keypress'||evt==='keyup') && e.key==='Enter' && imageJustPicked){
